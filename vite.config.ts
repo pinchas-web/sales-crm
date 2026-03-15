@@ -1,0 +1,20 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+
+  // נתיב מוחלט לVercel (לא יחסי כמו בתוסף WP)
+  base: '/',
+
+  server: {
+    // פרוקסי לפיתוח מקומי — מעביר /api/* ל-Vercel dev server
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
+})

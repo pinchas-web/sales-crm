@@ -1,0 +1,877 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   BRAND.CSS — שפת המותג: פנחס הורביץ
+   ספר מותג: בורדו #C7263A | זהב #D2AB62 | קרם #E5CB9B
+   קובץ עיצוב עצמאי — לא נוגע בקוד React/TypeScript
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   1. DESIGN TOKENS — משתני עיצוב גלובליים
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+:root {
+  /* ── Primary: בורדו-אדום ── */
+  --c-primary:        #C7263A;
+  --c-primary-dark:   #A31F31;
+  --c-primary-deeper: #821828;
+  --c-primary-light:  #F0C8CE;
+  --c-primary-xs:     #FDF2F4;
+
+  /* ── Secondary: זהב ── */
+  --c-gold:           #D2AB62;
+  --c-gold-dark:      #B08D44;
+  --c-gold-light:     #E5CB9B;
+  --c-gold-xs:        #FDF8EE;
+
+  /* ── Neutrals: ניוטרלים חמים (לא קרים) ── */
+  --c-bg:             #F7F5F1;
+  --c-surface:        #FFFFFF;
+  --c-surface-2:      #FAFAF7;
+  --c-border:         #E5DDD4;
+  --c-border-dark:    #CEC4B8;
+  --c-text:           #1C1815;
+  --c-text-muted:     #6B6057;
+  --c-text-light:     #A89F96;
+
+  /* ── Semantic ── */
+  --c-success:        #217A4E;
+  --c-success-bg:     #EAF7F1;
+  --c-warning:        #A06B0A;
+  --c-warning-bg:     #FEF6E3;
+  --c-danger:         #C7263A;
+  --c-danger-bg:      #FDF2F4;
+  --c-info:           #1D6FA4;
+  --c-info-bg:        #E8F3FB;
+
+  /* ── Shadows ── */
+  --shadow-xs: 0 1px 2px rgba(28,24,21,.06);
+  --shadow-sm: 0 1px 4px rgba(28,24,21,.08), 0 1px 2px rgba(28,24,21,.05);
+  --shadow-md: 0 4px 14px rgba(28,24,21,.10), 0 2px 4px rgba(28,24,21,.05);
+  --shadow-lg: 0 10px 32px rgba(28,24,21,.12), 0 3px 8px rgba(28,24,21,.06);
+  --shadow-xl: 0 20px 52px rgba(28,24,21,.14), 0 6px 14px rgba(28,24,21,.08);
+
+  /* ── Primary glow (buttons) ── */
+  --shadow-primary:     0 2px 10px rgba(199,38,58,.30);
+  --shadow-primary-lg:  0 6px 20px rgba(199,38,58,.40);
+
+  /* ── Radius ── */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 11px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-full: 9999px;
+
+  /* ── Transitions ── */
+  --ease:        cubic-bezier(.4, 0, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --t-fast:   0.13s;
+  --t-normal: 0.20s;
+  --t-slow:   0.35s;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   2. ANIMATIONS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+@keyframes brand-fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+@keyframes brand-slideDown {
+  from { opacity: 0; transform: translateY(-10px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);   }
+}
+@keyframes brand-slideUp {
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);   }
+}
+@keyframes brand-pop {
+  0%, 100% { transform: scale(1); }
+  45%      { transform: scale(1.14); }
+}
+@keyframes brand-pulse-ring {
+  0%   { box-shadow: 0 0 0 0   rgba(199,38,58,.45); }
+  70%  { box-shadow: 0 0 0 8px rgba(199,38,58,.00); }
+  100% { box-shadow: 0 0 0 0   rgba(199,38,58,.00); }
+}
+@keyframes brand-shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+@keyframes brand-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   3. GLOBAL: BODY, FONT, SCROLLBAR
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+body {
+  font-family: 'Almoni Tzar ML v5 AAA', 'Rubik', 'Heebo', 'Segoe UI', Tahoma, sans-serif !important;
+  background-color: var(--c-bg) !important;
+  color: var(--c-text) !important;
+  overflow-x: hidden !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Branded scrollbar */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--c-border-dark);
+  border-radius: var(--r-full);
+  transition: background var(--t-fast) var(--ease);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--c-gold); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   4. HEADER & NAVIGATION
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+header {
+  background: linear-gradient(to left, var(--c-primary-deeper), var(--c-primary-dark) 40%, var(--c-primary)) !important;
+  box-shadow: 0 2px 20px rgba(199,38,58,.28), 0 1px 0 rgba(255,255,255,.06) inset !important;
+  border-bottom: 1px solid var(--c-primary-deeper) !important;
+}
+
+/* App title in header */
+header h1 {
+  font-weight: 800 !important;
+  letter-spacing: .015em;
+  color: #fff !important;
+  text-shadow: 0 1px 6px rgba(0,0,0,.25);
+  flex-shrink: 0;
+}
+
+/* Override Tailwind gradient vars used by the header */
+.from-blue-700   { --tw-gradient-from: var(--c-primary-deeper) !important; }
+.to-indigo-700   { --tw-gradient-to:   var(--c-primary) !important; }
+.from-blue-600   { --tw-gradient-from: var(--c-primary) !important; }
+.to-blue-700     { --tw-gradient-to:   var(--c-primary-dark) !important; }
+.from-indigo-600 { --tw-gradient-from: var(--c-primary-dark) !important; }
+.to-indigo-700   { --tw-gradient-to:   var(--c-primary) !important; }
+
+/* Nav: hide overflow so nothing bleeds out */
+header nav {
+  overflow-x: hidden !important;
+  flex-wrap: wrap;
+  gap: 2px !important;
+}
+
+/* Active nav tab */
+header nav button {
+  transition: background var(--t-normal) var(--ease),
+              color     var(--t-normal) var(--ease) !important;
+  border-radius: var(--r-sm) !important;
+  font-size: .72rem !important;
+}
+
+/* User avatar in header */
+header [class*="bg-white/30"],
+header [class*="bg-white\/30"] {
+  background: rgba(255,255,255,.22) !important;
+  border: 1.5px solid rgba(255,255,255,.35) !important;
+  font-weight: 700 !important;
+}
+
+/* UserSwitcher dropdown */
+header + * .bg-white.rounded-xl,
+.absolute.bg-white.rounded-xl.shadow-xl {
+  border: 1px solid var(--c-border) !important;
+  box-shadow: var(--shadow-lg) !important;
+  animation: brand-slideDown var(--t-normal) var(--ease-spring) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   5. MAIN CONTENT AREA
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+main {
+  background: var(--c-bg) !important;
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+}
+
+/* Page-level animations: each view fades in on tab switch */
+main > * {
+  animation: brand-fadeIn var(--t-normal) var(--ease);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   6. TAILWIND COLOR OVERRIDES: BLUE → BRAND
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Backgrounds */
+.bg-blue-600               { background-color: var(--c-primary)       !important; }
+.bg-blue-700               { background-color: var(--c-primary-dark)   !important; }
+.bg-blue-500               { background-color: var(--c-primary)        !important; }
+.bg-blue-400               { background-color: var(--c-primary-light)  !important; }
+.bg-blue-50                { background-color: var(--c-primary-xs)     !important; }
+.bg-blue-100               { background-color: var(--c-primary-xs)     !important; }
+.bg-indigo-600             { background-color: var(--c-primary)        !important; }
+.bg-indigo-700             { background-color: var(--c-primary-dark)   !important; }
+.bg-indigo-50              { background-color: var(--c-primary-xs)     !important; }
+
+/* Hover backgrounds */
+.hover\:bg-blue-700:hover  { background-color: var(--c-primary-dark)  !important; }
+.hover\:bg-blue-600:hover  { background-color: var(--c-primary)       !important; }
+.hover\:bg-blue-50:hover   { background-color: var(--c-gold-xs)       !important; }
+.hover\:bg-blue-100:hover  { background-color: var(--c-primary-xs)    !important; }
+.hover\:bg-gray-50:hover   { background-color: var(--c-gold-xs)       !important; }
+
+/* Text */
+.text-blue-600             { color: var(--c-primary)       !important; }
+.text-blue-700             { color: var(--c-primary)       !important; }
+.text-blue-500             { color: var(--c-primary)       !important; }
+.text-blue-400             { color: var(--c-primary-light) !important; }
+.text-indigo-600           { color: var(--c-primary)       !important; }
+.text-indigo-700           { color: var(--c-primary-dark)  !important; }
+
+/* Borders */
+.border-blue-200           { border-color: var(--c-primary-light) !important; }
+.border-blue-300           { border-color: var(--c-primary-light) !important; }
+.border-blue-400           { border-color: var(--c-primary)       !important; }
+.border-blue-500           { border-color: var(--c-primary)       !important; }
+.border-indigo-500         { border-color: var(--c-primary)       !important; }
+
+/* Focus rings */
+.focus\:ring-blue-400:focus,
+.focus\:ring-blue-500:focus { --tw-ring-color: rgba(210,171,98,.50) !important; }
+
+/* Ring colors */
+.ring-blue-400, .ring-blue-500 { --tw-ring-color: var(--c-gold) !important; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   7. CARDS & SURFACES
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.bg-white {
+  background-color: var(--c-surface) !important;
+}
+.bg-gray-50 {
+  background-color: var(--c-surface-2) !important;
+}
+.bg-gray-100 {
+  background-color: var(--c-bg) !important;
+}
+
+/* Radius */
+.rounded-xl  { border-radius: var(--r-lg) !important; }
+.rounded-2xl { border-radius: var(--r-xl) !important; }
+.rounded-lg  { border-radius: var(--r-md) !important; }
+.rounded-md  { border-radius: var(--r-sm) !important; }
+
+/* Shadows */
+.shadow-sm  { box-shadow: var(--shadow-sm) !important; }
+.shadow     { box-shadow: var(--shadow-sm) !important; }
+.shadow-md  { box-shadow: var(--shadow-md) !important; }
+.shadow-lg  { box-shadow: var(--shadow-lg) !important; }
+.shadow-xl  { box-shadow: var(--shadow-xl) !important; }
+.shadow-2xl { box-shadow: var(--shadow-xl) !important; }
+
+/* Cards hover lift effect */
+.bg-white.rounded-xl,
+.bg-white.rounded-2xl,
+.bg-white.rounded-lg {
+  transition: box-shadow var(--t-normal) var(--ease),
+              transform  var(--t-normal) var(--ease),
+              border-color var(--t-normal) var(--ease) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   8. BUTTONS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+button {
+  transition: background var(--t-fast) var(--ease),
+              color      var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease),
+              transform  var(--t-fast) var(--ease-spring),
+              border-color var(--t-fast) var(--ease) !important;
+  letter-spacing: .01em;
+}
+button:active:not(:disabled) {
+  transform: scale(.96) !important;
+}
+button:disabled {
+  opacity: .45 !important;
+  cursor: not-allowed !important;
+}
+
+/* Primary button — brand crimson with glow */
+.bg-blue-600.text-white,
+button.bg-blue-600 {
+  background-color: var(--c-primary) !important;
+  box-shadow: var(--shadow-primary) !important;
+}
+.bg-blue-600.text-white:hover:not(:disabled),
+button.bg-blue-600:hover:not(:disabled) {
+  background-color: var(--c-primary-dark) !important;
+  box-shadow: var(--shadow-primary-lg) !important;
+  transform: translateY(-1px) !important;
+}
+.bg-blue-600.text-white:active:not(:disabled),
+button.bg-blue-600:active:not(:disabled) {
+  transform: translateY(0) scale(.97) !important;
+  box-shadow: var(--shadow-primary) !important;
+}
+
+/* Secondary button — bordered, gold on hover */
+button.border.border-gray-300,
+button[class*="border-gray-300"] {
+  border-color: var(--c-border) !important;
+  color: var(--c-text-muted) !important;
+}
+button.border.border-gray-300:hover:not(:disabled),
+button[class*="border-gray-300"]:hover:not(:disabled) {
+  background-color: var(--c-gold-xs) !important;
+  border-color: var(--c-gold) !important;
+  color: var(--c-gold-dark) !important;
+}
+
+/* Danger button */
+.bg-red-600.text-white,
+button.bg-red-600 {
+  background-color: var(--c-primary) !important;
+  box-shadow: var(--shadow-primary) !important;
+}
+.bg-red-600.text-white:hover:not(:disabled),
+button.bg-red-600:hover:not(:disabled) {
+  background-color: var(--c-primary-dark) !important;
+  box-shadow: var(--shadow-primary-lg) !important;
+}
+.hover\:bg-red-700:hover { background-color: var(--c-primary-dark) !important; }
+.bg-red-600 { background-color: var(--c-primary) !important; }
+.bg-red-500 { background-color: var(--c-primary) !important; }
+.hover\:bg-red-600:hover { background-color: var(--c-primary-dark) !important; }
+
+/* Success button */
+.bg-green-600.text-white,
+button.bg-green-600 {
+  box-shadow: 0 2px 10px rgba(33,122,78,.28) !important;
+}
+.bg-green-600.text-white:hover:not(:disabled),
+button.bg-green-600:hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 18px rgba(33,122,78,.38) !important;
+}
+
+/* Ghost / icon buttons */
+.hover\:bg-gray-100:hover {
+  background-color: var(--c-border) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   9. INPUTS, SELECTS, TEXTAREAS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border-color: var(--c-border) !important;
+  background-color: var(--c-surface) !important;
+  color: var(--c-text) !important;
+  border-radius: var(--r-md) !important;
+  transition: border-color var(--t-fast) var(--ease),
+              box-shadow   var(--t-fast) var(--ease) !important;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--c-gold) !important;
+  box-shadow: 0 0 0 3px rgba(210,171,98,.22) !important;
+  outline: none !important;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--c-text-light) !important;
+}
+
+/* Checkbox & radio: brand accent */
+input[type="checkbox"]:checked {
+  accent-color: var(--c-primary);
+}
+input[type="radio"]:checked {
+  accent-color: var(--c-primary);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   10. BORDERS & DIVIDERS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.border-gray-100, .border-gray-200 { border-color: var(--c-border)      !important; }
+.border-gray-300                   { border-color: var(--c-border)      !important; }
+.border-gray-400                   { border-color: var(--c-border-dark) !important; }
+.divide-gray-100 > * + *           { border-color: var(--c-border)      !important; }
+.divide-gray-200 > * + *           { border-color: var(--c-border)      !important; }
+.border-b                          { border-bottom-color: var(--c-border) !important; }
+.border-t                          { border-top-color:    var(--c-border) !important; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   11. TEXT COLORS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.text-gray-900 { color: var(--c-text)       !important; }
+.text-gray-800 { color: var(--c-text)       !important; }
+.text-gray-700 { color: var(--c-text)       !important; }
+.text-gray-600 { color: var(--c-text-muted) !important; }
+.text-gray-500 { color: var(--c-text-muted) !important; }
+.text-gray-400 { color: var(--c-text-light) !important; }
+.text-gray-300 { color: var(--c-text-light) !important; }
+
+/* Red text → brand crimson */
+.text-red-500  { color: var(--c-primary)      !important; }
+.text-red-600  { color: var(--c-primary)      !important; }
+.text-red-700  { color: var(--c-primary-dark) !important; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   12. MODALS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Backdrop blur */
+.fixed.inset-0.bg-black\/50,
+.fixed.inset-0.bg-black\/60 {
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+}
+
+/* Modal panel entrance animation */
+.fixed.inset-0 .bg-white.rounded-xl,
+.fixed.inset-0 .bg-white.rounded-2xl,
+.fixed.inset-0 .bg-white.rounded-xl.shadow-2xl {
+  animation: brand-slideUp var(--t-slow) var(--ease-spring) !important;
+  border: 1px solid var(--c-border) !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+
+/* Modal header */
+.fixed.inset-0 .bg-white .border-b {
+  background: var(--c-surface-2) !important;
+  border-bottom-color: var(--c-border) !important;
+  border-radius: var(--r-lg) var(--r-lg) 0 0 !important;
+}
+
+/* Modal close button */
+.fixed.inset-0 .bg-white button.text-gray-400 {
+  border-radius: var(--r-sm) !important;
+  transition: all var(--t-fast) var(--ease) !important;
+}
+.fixed.inset-0 .bg-white button.text-gray-400:hover {
+  background: var(--c-primary-xs) !important;
+  color: var(--c-primary) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   13. TABLES
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.overflow-x-auto {
+  border-radius: var(--r-lg) !important;
+}
+
+table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+}
+
+thead th {
+  background: var(--c-surface-2) !important;
+  color: var(--c-text-muted) !important;
+  font-size: .70rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .05em !important;
+  text-transform: uppercase !important;
+  border-bottom: 1.5px solid var(--c-border) !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  white-space: nowrap !important;
+}
+
+thead th:first-child { border-radius: var(--r-lg) 0 0 0 !important; }
+thead th:last-child  { border-radius: 0 var(--r-lg) 0 0 !important; }
+
+tbody tr {
+  transition: background-color var(--t-fast) var(--ease) !important;
+  border-bottom: 1px solid var(--c-border) !important;
+}
+tbody tr:hover {
+  background-color: var(--c-gold-xs) !important;
+}
+tbody tr:last-child { border-bottom: none !important; }
+
+tbody td {
+  color: var(--c-text) !important;
+  font-size: .82rem !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  white-space: nowrap !important;
+}
+
+/* Ensure table never overflows the page */
+.overflow-x-auto > table {
+  min-width: unset !important;
+}
+
+/* Selected row in table */
+tbody tr.bg-blue-50,
+tbody tr[class*="bg-blue-50"] {
+  background-color: var(--c-primary-xs) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   14. SCORE BADGES
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* High score (≥75) → gold */
+.bg-green-100.text-green-700 {
+  background-color: var(--c-gold-xs) !important;
+  color: var(--c-gold-dark) !important;
+  border: 1px solid rgba(210,171,98,.3) !important;
+}
+/* Medium score (45-75) → warm amber */
+.bg-yellow-100.text-yellow-700 {
+  background-color: #FFF8EB !important;
+  color: #9A6E10 !important;
+}
+/* Low score (<45) → brand crimson tint */
+.bg-red-100.text-red-600,
+.bg-red-100.text-red-700 {
+  background-color: var(--c-primary-xs) !important;
+  color: var(--c-primary) !important;
+  border: 1px solid rgba(199,38,58,.2) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   15. PROGRESS BAR
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Track */
+.bg-gray-200.rounded-full {
+  background-color: var(--c-border) !important;
+}
+/* Fill — gradient from crimson to gold */
+.bg-blue-500.h-full,
+.bg-blue-500.rounded-full {
+  background: linear-gradient(to right, var(--c-primary), var(--c-gold)) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   16. TOGGLE (checkbox-style)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Active toggle track */
+.bg-blue-500.rounded-full.relative,
+[class*="bg-blue-500"][class*="rounded-full"] {
+  background-color: var(--c-primary) !important;
+  box-shadow: 0 0 0 2px rgba(199,38,58,.15) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   17. NOTIFICATION BADGES
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Nav notification dot */
+.bg-red-500.text-white.rounded-full {
+  background-color: var(--c-gold) !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  animation: brand-pulse-ring 2.5s var(--ease) infinite;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   18. KANBAN CARDS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Kanban card hover */
+.card-drag-handle {
+  transition: box-shadow var(--t-normal) var(--ease),
+              transform  var(--t-normal) var(--ease-spring) !important;
+}
+.card-drag-handle:hover {
+  box-shadow: var(--shadow-md) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Kanban column header accent line */
+.bg-white.rounded-xl .border-b:first-child {
+  position: relative;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   19. DROPDOWN MENUS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.absolute.bg-white.rounded-xl,
+.absolute.bg-white.rounded-lg,
+.absolute.bg-white.shadow-xl,
+.absolute.bg-white.shadow-lg {
+  animation: brand-slideDown var(--t-normal) var(--ease-spring) !important;
+  border: 1px solid var(--c-border) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* Dropdown items hover */
+.absolute.bg-white button:hover,
+.absolute.bg-white a:hover {
+  background-color: var(--c-gold-xs) !important;
+  color: var(--c-gold-dark) !important;
+}
+
+/* Active user in switcher dropdown */
+.bg-blue-50.text-blue-700 {
+  background-color: var(--c-primary-xs) !important;
+  color: var(--c-primary) !important;
+}
+
+/* User avatar small circle */
+.bg-blue-500.text-white.text-xs {
+  background-color: var(--c-primary) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   20. LOADING SCREEN
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.min-h-screen.bg-gradient-to-br {
+  background: linear-gradient(135deg, var(--c-primary-deeper), var(--c-primary-dark), var(--c-primary)) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   21. ONBOARDING POPUP (blue info box)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.bg-blue-50.rounded-xl.border-blue-200,
+.bg-blue-50.rounded-xl.border {
+  background-color: var(--c-gold-xs) !important;
+  border-color: rgba(210,171,98,.40) !important;
+}
+.text-blue-700.mb-2,
+.text-blue-600 {
+  color: var(--c-gold-dark) !important;
+}
+.text-blue-400 {
+  color: var(--c-gold) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   22. SETTINGS / SIDEBAR TABS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Active settings tab */
+.border-blue-500,
+.text-blue-700.font-semibold {
+  border-color: var(--c-primary) !important;
+  color: var(--c-primary) !important;
+}
+/* Settings tab active background */
+.bg-blue-50.text-blue-700 {
+  background-color: var(--c-primary-xs) !important;
+  color: var(--c-primary) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   23. BULK ACTION BAR
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Bulk bar (typically has blue-50 or blue-100 background) */
+.bg-blue-50.border-blue-200,
+[class*="bg-blue-50"][class*="border-blue"] {
+  background: linear-gradient(to left, var(--c-primary-xs), #fff8) !important;
+  border-color: var(--c-primary-light) !important;
+  border-radius: var(--r-md) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   24. CHART COLORS (Recharts)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Recharts SVG fill overrides via CSS */
+.recharts-bar-rectangle path    { fill: var(--c-primary) !important; }
+.recharts-active-bar path       { fill: var(--c-primary-dark) !important; }
+.recharts-line-curve            { stroke: var(--c-primary) !important; }
+.recharts-dot circle            { fill: var(--c-primary) !important; stroke: var(--c-surface) !important; }
+.recharts-legend-item-text      { color: var(--c-text-muted) !important; }
+.recharts-cartesian-axis-tick-value { fill: var(--c-text-light) !important; }
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r-md) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   25. LABEL / FIELD LABELS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.field-label,
+label.block.text-xs,
+label[class*="text-xs"] {
+  color: var(--c-text-muted) !important;
+  font-weight: 600 !important;
+  letter-spacing: .02em !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   26. EMPTY STATE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* EmptyState component */
+.flex.flex-col.items-center.justify-center.py-16 {
+  animation: brand-fadeIn var(--t-slow) var(--ease) !important;
+}
+.flex.flex-col.items-center.justify-center.py-16 .text-5xl {
+  animation: brand-pop 0.5s var(--ease-spring) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   27. KPI CARDS (Dashboard)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* KPI cards lift on hover */
+.bg-white.rounded-xl.p-4:hover,
+.bg-white.rounded-xl.p-5:hover,
+.bg-white.rounded-xl.p-6:hover {
+  box-shadow: var(--shadow-md) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Brand accent top-border on KPI cards */
+.bg-white.rounded-xl.p-4::before,
+.bg-white.rounded-xl.p-5::before {
+  content: '';
+  display: block;
+  height: 3px;
+  width: 40px;
+  background: linear-gradient(to right, var(--c-primary), var(--c-gold));
+  border-radius: var(--r-full);
+  margin-bottom: 4px;
+  opacity: 0;
+  transition: opacity var(--t-normal) var(--ease), width var(--t-normal) var(--ease);
+}
+.bg-white.rounded-xl.p-4:hover::before,
+.bg-white.rounded-xl.p-5:hover::before {
+  opacity: 1;
+  width: 60px;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   28. CHAT VIEW
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* Outgoing message bubble (currently blue) */
+.bg-blue-500.text-white.rounded-xl,
+.bg-blue-600.text-white.rounded-xl {
+  background: linear-gradient(135deg, var(--c-primary), var(--c-primary-dark)) !important;
+  box-shadow: 0 2px 8px rgba(199,38,58,.25) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   29. RESPONSIVE LAYOUT
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Desktop (≥1280px): full layout as designed */
+@media (min-width: 1280px) {
+  main { padding-left: 24px !important; padding-right: 24px !important; }
+}
+
+/* Tablet (768–1279px) */
+@media (max-width: 1279px) and (min-width: 768px) {
+  main { padding-left: 16px !important; padding-right: 16px !important; }
+
+  /* 4-col grids → 2-col */
+  .grid.grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Tables: compact text */
+  tbody td, thead th { font-size: .75rem !important; padding-left: 8px !important; padding-right: 8px !important; }
+}
+
+/* Mobile (< 768px) */
+@media (max-width: 767px) {
+  main {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+  }
+
+  header .max-w-screen-2xl {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+
+  /* Stack all grids to single column */
+  .grid.grid-cols-4,
+  .grid.grid-cols-3,
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Hide app title on tiny screens to save space */
+  header h1 {
+    font-size: .8rem !important;
+    max-width: 80px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Nav labels: always hidden on mobile (icons only) */
+  header nav button span:last-of-type {
+    display: none !important;
+  }
+
+  /* Table: let it scroll within its container, not the page */
+  .overflow-x-auto {
+    overflow-x: auto !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+
+  /* Modal: full-width on mobile */
+  .fixed.inset-0 .bg-white.rounded-xl,
+  .fixed.inset-0 .bg-white.rounded-2xl {
+    margin: 8px !important;
+    max-height: calc(100dvh - 16px) !important;
+    width: calc(100vw - 16px) !important;
+    max-width: none !important;
+  }
+
+  /* Buttons: slightly larger tap targets */
+  button { min-height: 34px; }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   30. UTILITY CLASSES (reusable brand helpers)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Brand accent line — add as a top border accent on any card */
+.brand-accent-top {
+  border-top: 3px solid var(--c-primary) !important;
+}
+.brand-accent-top-gold {
+  border-top: 3px solid var(--c-gold) !important;
+}
+
+/* Gradient text */
+.brand-gradient-text {
+  background: linear-gradient(to right, var(--c-primary), var(--c-gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shimmer loading state */
+.brand-shimmer {
+  background: linear-gradient(90deg, var(--c-border) 25%, var(--c-gold-xs) 50%, var(--c-border) 75%);
+  background-size: 200% 100%;
+  animation: brand-shimmer 1.5s infinite;
+}
+
+/* Subtle brand surface */
+.brand-surface {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Brand badge */
+.brand-badge-primary {
+  background-color: var(--c-primary-xs);
+  color: var(--c-primary);
+  border: 1px solid var(--c-primary-light);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: .72rem;
+  font-weight: 600;
+}
+.brand-badge-gold {
+  background-color: var(--c-gold-xs);
+  color: var(--c-gold-dark);
+  border: 1px solid rgba(210,171,98,.35);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: .72rem;
+  font-weight: 600;
+}
