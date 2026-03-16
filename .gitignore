@@ -8,6 +8,7 @@ dist-ssr/
 # משתני סביבה — לא מועלים ל-GitHub לעולם!
 .env
 .env.local
+.env.local.example
 .env.*.local
 *.local
 
