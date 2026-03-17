@@ -19,7 +19,6 @@ import TasksView     from './views/TasksView';
 import DataView      from './views/DataView';
 import ChatView      from './views/ChatView';
 import SettingsPanel from './views/SettingsPanel';
-import DesignEditor  from './views/DesignEditor';
 
 // ─── State merge ──────────────────────────────────────────────────────────────
 
@@ -184,6 +183,7 @@ export default function App() {
   const [activeTab, setActiveTab]             = useState('home');
   const [pendingOnboarding, setPendingOnboarding] = useState<Lead | null>(null);
   const [loading, setLoading]                 = useState(true);
+  const [viewAsId, setViewAsId]               = useState<string | null>(null);
 
   // טעינה ראשונית מ-API (רק כשיש session)
   const didLoad = useRef(false);
@@ -496,10 +496,29 @@ export default function App() {
     );
   }
 
+  // כשהמנהל צופה כמשתמש אחר — state מסונן לפי המשתמש הנצפה (לא לשמירה)
+  const effectiveState = viewAsId ? { ...state, currentUserId: viewAsId } : state;
+
   return (
     <div className="min-h-screen bg-gray-100 text-right" dir="rtl">
+      {/* Sticky top wrapper: view-as banner + header */}
+      <div className="sticky top-0 z-40">
+        {viewAsId && (
+          <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 flex items-center gap-3" dir="rtl">
+            <span className="text-amber-800 font-semibold text-sm">
+              👁️ צופה כ: {state.users.find(u => u.id === viewAsId)?.name}
+            </span>
+            <span className="text-amber-600 text-xs">(מצב צפייה — הנתונים מסוננים כמשתמש זה)</span>
+            <button
+              onClick={() => { setViewAsId(null); setActiveTab('settings'); }}
+              className="mr-auto text-xs bg-amber-600 text-white px-3 py-1 rounded-lg hover:bg-amber-700 transition-colors">
+              ✕ חזור לתצוגת מנהל
+            </button>
+          </div>
+        )}
+
       {/* Header */}
-      <header className="bg-gradient-to-l from-blue-700 to-indigo-700 text-white sticky top-0 z-40 shadow-lg">
+      <header className="bg-gradient-to-l from-blue-700 to-indigo-700 text-white shadow-lg">
         <div className="max-w-screen-2xl mx-auto px-4 py-2.5 flex items-center gap-2">
           <h1 className="text-base font-bold tracking-wide ml-2 shrink-0">
             {getLabel('app.title')}
@@ -529,12 +548,13 @@ export default function App() {
           <UserBadge state={state} />
         </div>
       </header>
+      </div>{/* end sticky top wrapper */}
 
       {/* Main */}
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
         {activeTab === 'home' && (
           <HomePage
-            state={state}
+            state={effectiveState}
             onNavigate={setActiveTab}
             onUpdateTask={handleUpdateTask}
             onAddTask={handleAddTask}
@@ -545,7 +565,7 @@ export default function App() {
         )}
         {activeTab === 'leads' && (
           <LeadsView
-            state={state}
+            state={effectiveState}
             onAddLead={handleAddLead}
             onBulkAddLeads={handleBulkAddLeads}
             onBulkUpdateLeads={handleBulkUpdateLeads}
@@ -560,22 +580,22 @@ export default function App() {
           />
         )}
         {activeTab === 'clients' && (
-          <ClientsView state={state} onSaveClient={handleSaveClient} />
+          <ClientsView state={effectiveState} onSaveClient={handleSaveClient} />
         )}
         {activeTab === 'products' && (
-          <ProductsView state={state} onSaveProduct={handleSaveProduct} onDeleteProduct={handleDeleteProduct} />
+          <ProductsView state={effectiveState} onSaveProduct={handleSaveProduct} onDeleteProduct={handleDeleteProduct} />
         )}
         {activeTab === 'tasks' && (
           <TasksView
-            state={state}
+            state={effectiveState}
             onAddTask={handleAddTask}
             onUpdateTask={handleUpdateTask}
             onDeleteTask={handleDeleteTask}
           />
         )}
-        {activeTab === 'data'     && <DataView      state={state} />}
-        {activeTab === 'chat'     && <ChatView      state={state} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
-        {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} />}
+        {activeTab === 'data'     && <DataView      state={effectiveState} />}
+        {activeTab === 'chat'     && <ChatView      state={effectiveState} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
+        {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>
 
       {/* Client onboarding popup */}
@@ -588,8 +608,6 @@ export default function App() {
         />
       )}
 
-      {/* Visual design editor — floating 🎨 button, bottom-left */}
-      <DesignEditor />
     </div>
   );
 }

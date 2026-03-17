@@ -7,10 +7,11 @@ import { useState } from 'react';
 import { supabase } from '../api';
 
 export default function LoginScreen() {
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [email,        setEmail]        = useState('');
+  const [password,     setPassword]     = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error,        setError]        = useState('');
+  const [loading,      setLoading]      = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -78,18 +79,29 @@ export default function LoginScreen() {
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               סיסמה
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              autoComplete="current-password"
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         placeholder:text-gray-400 transition-all"
-              dir="ltr"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           placeholder:text-gray-400 transition-all pr-11"
+                dir="ltr"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(p => !p)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none"
+                tabIndex={-1}
+                title={showPassword ? 'הסתר סיסמה' : 'הצג סיסמה'}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           {/* הודעת שגיאה */}

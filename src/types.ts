@@ -14,6 +14,7 @@ export interface User {
   role: UserRole;
   commissionRate: number;        // 0.10 = 10%
   email?: string;                // מייל לזיהוי מול Supabase Auth
+  password?: string;             // סיסמה — גלויה למנהל בלבד
 }
 
 export interface Status {

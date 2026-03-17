@@ -79,3 +79,32 @@ export async function apiGetCurrentUser(): Promise<{ crm_user_id: string; name: 
     return null;
   }
 }
+
+/**
+ * יצירת משתמש חדש (מנהל בלבד) — יוצר ב-Supabase Auth ו-crm_users.
+ */
+export async function apiCreateUser(params: {
+  email: string;
+  password: string;
+  crm_user_id: string;
+  role: 'admin' | 'salesperson';
+}): Promise<{ auth_user_id: string } | { error: string }> {
+  const res = await fetch('/api/users/create', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * מחיקת משתמש (מנהל בלבד) — מוחק מ-Supabase Auth ו-crm_users.
+ */
+export async function apiDeleteUser(crm_user_id: string): Promise<{ ok: boolean } | { error: string }> {
+  const res = await fetch('/api/users/delete', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ crm_user_id }),
+  });
+  return res.json();
+}

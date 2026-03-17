@@ -1,12 +1,14 @@
 /**
  * לוח הגדרות — מנהל בלבד.
- * 6 לשוניות: סטטוסים (עם color picker), רשימות בחירה, שדות מותאמים,
- * משתמשים (עם % עמלה), אוטומציות, וממשק (שמות לשוניות + סדר).
+ * 7 לשוניות: סטטוסים, רשימות בחירה, שדות מותאמים,
+ * משתמשים, אוטומציות, ממשק, עיצוב.
  */
 import { useState } from 'react';
 import type { AppState, Status, User, AutomationRule, CustomField } from '../types';
 import { uid, DEFAULT_LABELS } from '../utils';
 import { Btn, Input, SelectInput, ConfirmDialog, Toggle } from '../ui';
+import { apiCreateUser, apiDeleteUser } from '../api';
+import DesignEditor from './DesignEditor';
 
 // ─── Statuses Tab ──────────────────────────────────────────────────────────────
 
@@ -86,7 +88,6 @@ function StatusesTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppSt
           </div>
         ))}
       </div>
-      {/* Add new */}
       <div className="border border-dashed border-gray-300 rounded-xl p-3 space-y-2">
         <p className="text-xs font-medium text-gray-600">+ סטטוס חדש</p>
         <div className="flex gap-2">
@@ -205,55 +206,147 @@ function FieldsTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppStat
 
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
-function UsersTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppState) => void }) {
-  const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState<User['role']>('salesperson');
-  const [newRate, setNewRate] = useState('10');
+function UsersTab({
+  state, onUpdate, onViewAs,
+}: {
+  state: AppState;
+  onUpdate: (s: AppState) => void;
+  onViewAs: (id: string) => void;
+}) {
+  const [newName,     setNewName]     = useState('');
+  const [newEmail,    setNewEmail]    = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole,     setNewRole]     = useState<User['role']>('salesperson');
+  const [newRate,     setNewRate]     = useState('10');
+  const [creating,    setCreating]    = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [confirmDel,  setConfirmDel]  = useState<string | null>(null);
+  const [deletingId,  setDeletingId]  = useState<string | null>(null);
 
-  function addUser() {
-    if (!newName.trim()) return;
-    const u: User = { id: uid(), name: newName.trim(), role: newRole, commissionRate: Number(newRate) / 100 };
+  async function addUser() {
+    if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) return;
+    setCreating(true);
+    setCreateError('');
+
+    const newId = uid();
+    const result = await apiCreateUser({
+      email: newEmail.trim(),
+      password: newPassword.trim(),
+      crm_user_id: newId,
+      role: newRole,
+    });
+
+    if ('error' in result) {
+      setCreateError(result.error);
+      setCreating(false);
+      return;
+    }
+
+    const u: User = {
+      id: newId,
+      name: newName.trim(),
+      role: newRole,
+      commissionRate: Number(newRate) / 100,
+      email: newEmail.trim(),
+      password: newPassword.trim(),
+    };
     onUpdate({ ...state, users: [...state.users, u] });
-    setNewName(''); setNewRole('salesperson'); setNewRate('10');
+    setNewName(''); setNewEmail(''); setNewPassword(''); setNewRole('salesperson'); setNewRate('10');
+    setCreating(false);
   }
 
   function updateUser(id: string, patch: Partial<User>) {
     onUpdate({ ...state, users: state.users.map(u => u.id === id ? { ...u, ...patch } : u) });
   }
 
-  function deleteUser(id: string) {
+  async function deleteUser(id: string) {
     if (id === state.currentUserId) return;
-    onUpdate({ ...state, users: state.users.filter(u => u.id !== id) });
+    setDeletingId(id);
+    const result = await apiDeleteUser(id);
+    if ('error' in result) {
+      alert('שגיאה במחיקת המשתמש: ' + result.error);
+    } else {
+      onUpdate({ ...state, users: state.users.filter(u => u.id !== id) });
+    }
+    setDeletingId(null);
+    setConfirmDel(null);
   }
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2 max-h-64 overflow-y-auto">
+      {/* Show/hide passwords toggle */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-700">משתמשי המערכת</p>
+        <button
+          onClick={() => setShowPasswords(p => !p)}
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg px-2.5 py-1 transition-colors">
+          {showPasswords ? '🙈 הסתר סיסמאות' : '👁️ הצג סיסמאות'}
+        </button>
+      </div>
+
+      <div className="space-y-2 max-h-72 overflow-y-auto">
         {state.users.map(u => (
-          <div key={u.id} className="flex items-center gap-2 bg-white rounded-xl border p-2.5">
-            <div className="w-7 h-7 rounded-full bg-indigo-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
-              {u.name.charAt(0)}
+          <div key={u.id} className="bg-white rounded-xl border p-3 space-y-2">
+            {/* Row 1: avatar + name + role + commission */}
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-indigo-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                {u.name.charAt(0)}
+              </div>
+              <Input value={u.name} onChange={v => updateUser(u.id, { name: v })} className="flex-1" />
+              <SelectInput value={u.role} onChange={v => updateUser(u.id, { role: v as User['role'] })}
+                options={[{ value: 'admin', label: 'מנהל' }, { value: 'salesperson', label: 'נציג' }]}
+                className="w-24" />
+              <div className="flex items-center gap-1 shrink-0">
+                <input type="number" value={Math.round(u.commissionRate * 100)} min={0} max={100}
+                  onChange={e => updateUser(u.id, { commissionRate: Number(e.target.value) / 100 })}
+                  className="w-14 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                <span className="text-xs text-gray-500">%</span>
+              </div>
             </div>
-            <Input value={u.name} onChange={v => updateUser(u.id, { name: v })} className="flex-1" />
-            <SelectInput value={u.role} onChange={v => updateUser(u.id, { role: v as User['role'] })}
-              options={[{ value: 'admin', label: 'מנהל' }, { value: 'salesperson', label: 'נציג' }]}
-              className="w-24" />
-            <div className="flex items-center gap-1 shrink-0">
-              <input type="number" value={Math.round(u.commissionRate * 100)} min={0} max={100}
-                onChange={e => updateUser(u.id, { commissionRate: Number(e.target.value) / 100 })}
-                className="w-14 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
-              <span className="text-xs text-gray-500">%</span>
+
+            {/* Row 2: email + password (if shown) */}
+            <div className="flex items-center gap-2">
+              <input
+                type="email" value={u.email ?? ''} placeholder="מייל"
+                onChange={e => updateUser(u.id, { email: e.target.value })}
+                className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                dir="ltr" />
+              {showPasswords && (
+                <input
+                  type="text" value={u.password ?? ''} placeholder="סיסמה"
+                  onChange={e => updateUser(u.id, { password: e.target.value })}
+                  className="w-36 border border-gray-300 rounded-lg px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  dir="ltr" />
+              )}
             </div>
-            {u.id === state.currentUserId
-              ? <span className="text-xs text-blue-500 shrink-0">אתה</span>
-              : <Btn size="xs" variant="danger" onClick={() => deleteUser(u.id)}>✕</Btn>}
+
+            {/* Row 3: actions */}
+            <div className="flex items-center gap-2 justify-end">
+              {u.id === state.currentUserId ? (
+                <span className="text-xs text-blue-500">אתה</span>
+              ) : (
+                <>
+                  <Btn size="xs" variant="ghost" onClick={() => onViewAs(u.id)}>
+                    👁️ צפה כ...
+                  </Btn>
+                  <Btn size="xs" variant="danger"
+                    onClick={() => setConfirmDel(u.id)}
+                    disabled={deletingId === u.id}>
+                    {deletingId === u.id ? '...' : '✕ מחק'}
+                  </Btn>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Add new user */}
       <div className="border border-dashed border-gray-300 rounded-xl p-3 space-y-2">
         <p className="text-xs font-medium text-gray-600">+ משתמש חדש</p>
         <div className="flex gap-2">
-          <Input value={newName} onChange={setNewName} placeholder="שם *" />
+          <Input value={newName} onChange={setNewName} placeholder="שם *" className="flex-1" />
           <SelectInput value={newRole} onChange={v => setNewRole(v as User['role'])}
             options={[{ value: 'admin', label: 'מנהל' }, { value: 'salesperson', label: 'נציג' }]}
             className="w-24" />
@@ -263,8 +356,30 @@ function UsersTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppState
             <span className="text-xs text-gray-500">%</span>
           </div>
         </div>
-        <Btn size="sm" onClick={addUser} disabled={!newName.trim()}>+ הוסף משתמש</Btn>
+        <div className="flex gap-2">
+          <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
+            placeholder="מייל *"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            dir="ltr" />
+          <input type="text" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+            placeholder="סיסמה *"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+            dir="ltr" />
+        </div>
+        {createError && (
+          <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-1.5">⚠️ {createError}</p>
+        )}
+        <Btn size="sm" onClick={addUser}
+          disabled={!newName.trim() || !newEmail.trim() || !newPassword.trim() || creating}>
+          {creating ? '⏳ יוצר...' : '+ הוסף משתמש'}
+        </Btn>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmDel}
+        message="למחוק משתמש זה לצמיתות? פעולה זו אינה ניתנת לביטול."
+        onConfirm={() => confirmDel && deleteUser(confirmDel)}
+        onCancel={() => setConfirmDel(null)} />
     </div>
   );
 }
@@ -314,7 +429,6 @@ function AutomationsTab({ state, onUpdate }: { state: AppState; onUpdate: (s: Ap
 
   return (
     <div className="space-y-3">
-      {/* Existing rules */}
       <div className="space-y-2 max-h-48 overflow-y-auto">
         {state.automationRules.length === 0 && <p className="text-sm text-gray-400 text-center py-4">אין חוקי אוטומציה</p>}
         {state.automationRules.map(rule => (
@@ -331,7 +445,6 @@ function AutomationsTab({ state, onUpdate }: { state: AppState; onUpdate: (s: Ap
         ))}
       </div>
 
-      {/* Add new rule */}
       <div className="border border-dashed border-gray-300 rounded-xl p-3 space-y-2">
         <p className="text-xs font-medium text-gray-600">+ חוק אוטומציה חדש</p>
         <Input value={newName} onChange={setNewName} placeholder="שם החוק *" />
@@ -405,7 +518,6 @@ function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppS
     onUpdate({ ...state, navConfig: state.navConfig.map(t => t.id === id ? { ...t, visible: !t.visible } : t) });
   }
 
-  // Labels editor
   const importantLabels = [
     'app.title', 'tab.home', 'tab.leads', 'tab.clients', 'tab.products',
     'tab.tasks', 'tab.data', 'tab.chat', 'tab.settings',
@@ -424,7 +536,6 @@ function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppS
 
   return (
     <div className="space-y-6">
-      {/* Nav tabs order + visibility */}
       <div>
         <p className="text-sm font-semibold text-gray-700 mb-2">סדר ונראות לשוניות ניווט</p>
         <div className="space-y-1.5">
@@ -439,7 +550,6 @@ function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppS
         </div>
       </div>
 
-      {/* Labels editor */}
       <div>
         <p className="text-sm font-semibold text-gray-700 mb-2">עריכת כיתובים</p>
         <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -463,7 +573,6 @@ function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppS
         </div>
       </div>
 
-      {/* Daily summary email */}
       <div>
         <p className="text-sm font-semibold text-gray-700 mb-2">מייל לסיכום יומי</p>
         <Input
@@ -480,12 +589,13 @@ function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppS
 // ─── Settings Panel ────────────────────────────────────────────────────────────
 
 export default function SettingsPanel({
-  state, onUpdate,
+  state, onUpdate, onViewAs,
 }: {
   state: AppState;
   onUpdate: (s: AppState) => void;
+  onViewAs: (id: string) => void;
 }) {
-  const [tab, setTab] = useState<'statuses' | 'dropdowns' | 'fields' | 'users' | 'automations' | 'interface'>('statuses');
+  const [tab, setTab] = useState<'statuses' | 'dropdowns' | 'fields' | 'users' | 'automations' | 'interface' | 'design'>('statuses');
 
   const currentUser = state.users.find(u => u.id === state.currentUserId);
   if (currentUser?.role !== 'admin') {
@@ -506,7 +616,8 @@ export default function SettingsPanel({
     { id: 'fields',      label: '🔧 שדות'       },
     { id: 'users',       label: '👤 משתמשים'    },
     { id: 'automations', label: '🤖 אוטומציות'  },
-    { id: 'interface',   label: '🎨 ממשק'       },
+    { id: 'interface',   label: '🖥️ ממשק'       },
+    { id: 'design',      label: '🎨 עיצוב'      },
   ] as const;
 
   return (
@@ -529,9 +640,10 @@ export default function SettingsPanel({
         {tab === 'statuses'    && <StatusesTab    state={state} onUpdate={onUpdate} />}
         {tab === 'dropdowns'   && <DropdownsTab   state={state} onUpdate={onUpdate} />}
         {tab === 'fields'      && <FieldsTab      state={state} onUpdate={onUpdate} />}
-        {tab === 'users'       && <UsersTab       state={state} onUpdate={onUpdate} />}
+        {tab === 'users'       && <UsersTab       state={state} onUpdate={onUpdate} onViewAs={onViewAs} />}
         {tab === 'automations' && <AutomationsTab state={state} onUpdate={onUpdate} />}
         {tab === 'interface'   && <InterfaceTab   state={state} onUpdate={onUpdate} />}
+        {tab === 'design'      && <DesignEditor />}
       </div>
     </div>
   );
