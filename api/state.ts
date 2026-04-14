@@ -164,6 +164,7 @@ function noteToDb(n: Row): Row {
 // ════════════════════════════════════════════════════════════════════
 
 async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
+  console.log(`[CRM GET] uid=${uid} isAdmin=${isAdmin}`);
   // קונפיגורציה משותפת
   const { data: config, error: cfgErr } = await supabaseAdmin
     .from('crm_config')
@@ -216,6 +217,7 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     return res.status(200).json(null);
   }
 
+  console.log(`[CRM GET] ✓ returning: leads=${leads.length} tasks=${(tasks??[]).length} activities=${(activities??[]).length} clients=${clients.length} chat=${chatMessages.length} notes=${pinnedNotes.length}`);
   return res.status(200).json({
     // קונפיגורציה
     users:             config.users              ?? [],
@@ -260,9 +262,11 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     }
   }
 
+  console.log(`[CRM POST] uid=${uid} isAdmin=${isAdmin} | leads=${(incoming.leads??[]).length} tasks=${(incoming.tasks??[]).length} activities=${(incoming.activities??[]).length} clients=${(incoming.clients??[]).length} chat=${(incoming.chatMessages??[]).length} notes=${(incoming.pinnedNotes??[]).length}`);
+
   // ── קונפיגורציה (admin בלבד) ──────────────────────────────────────────────
   if (isAdmin) {
-    await supabaseAdmin.from('crm_config').upsert({
+    const { error: cfgErr } = await supabaseAdmin.from('crm_config').upsert({
       id:                  '00000000-0000-0000-0000-000000000001',
       users:               incoming.users              ?? [],
       statuses:            incoming.statuses           ?? [],
@@ -277,6 +281,8 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
       daily_summary_email: incoming.dailySummaryEmail  ?? '',
       updated_at:          new Date().toISOString(),
     });
+    if (cfgErr) console.error('[CRM] crm_config upsert ERROR:', cfgErr);
+    else console.log('[CRM] crm_config ✓ saved');
   }
 
   // ── לידים: upsert + delete ────────────────────────────────────────────────
@@ -288,20 +294,26 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     const { error } = await supabaseAdmin
       .from('leads')
       .upsert(leadsToSave.map(leadToDb));
-    if (error) console.error('leads upsert error:', error);
+    if (error) console.error('[CRM] leads upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] leads ✓ upserted ${leadsToSave.length} rows`);
+  } else {
+    console.log('[CRM] leads — nothing to upsert');
   }
 
   // מחיקת לידים שנמחקו
   const existingLeadsQ = supabaseAdmin.from('leads').select('id');
-  const { data: existingLeads = [] } = await (isAdmin
+  const { data: existingLeads = [], error: elErr } = await (isAdmin
     ? existingLeadsQ
     : existingLeadsQ.eq('assigned_to', uid));
+  if (elErr) console.error('[CRM] leads select ERROR:', elErr);
   const incomingLeadIds = new Set((incoming.leads ?? []).map((l: Row) => l.id));
   const leadsToDelete = (existingLeads ?? [])
     .filter((l: Row) => !incomingLeadIds.has(l.id))
     .map((l: Row) => l.id);
   if (leadsToDelete.length > 0) {
-    await supabaseAdmin.from('leads').delete().in('id', leadsToDelete);
+    const { error: delErr } = await supabaseAdmin.from('leads').delete().in('id', leadsToDelete);
+    if (delErr) console.error('[CRM] leads delete ERROR:', delErr);
+    else console.log(`[CRM] leads ✓ deleted ${leadsToDelete.length} rows`);
   }
 
   // ── פעילויות: upsert + delete ─────────────────────────────────────────────
@@ -313,8 +325,11 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
   if (activitiesToSave.length > 0) {
     const { error } = await supabaseAdmin
       .from('activities')
-      .upsert(activitiesToSave); // activities already snake_case in frontend
-    if (error) console.error('activities upsert error:', error);
+      .upsert(activitiesToSave);
+    if (error) console.error('[CRM] activities upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] activities ✓ upserted ${activitiesToSave.length} rows`);
+  } else {
+    console.log('[CRM] activities — nothing to upsert');
   }
 
   // מחיקת פעילויות שנמחקו
@@ -326,7 +341,9 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
       .filter((a: Row) => !incomingActIds.has(a.id))
       .map((a: Row) => a.id);
     if (actsToDelete.length > 0) {
-      await supabaseAdmin.from('activities').delete().in('id', actsToDelete);
+      const { error } = await supabaseAdmin.from('activities').delete().in('id', actsToDelete);
+      if (error) console.error('[CRM] activities delete ERROR:', error);
+      else console.log(`[CRM] activities ✓ deleted ${actsToDelete.length} rows`);
     }
   }
 
@@ -338,21 +355,27 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
   if (tasksToSave.length > 0) {
     const { error } = await supabaseAdmin
       .from('tasks')
-      .upsert(tasksToSave); // tasks already snake_case
-    if (error) console.error('tasks upsert error:', error);
+      .upsert(tasksToSave);
+    if (error) console.error('[CRM] tasks upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] tasks ✓ upserted ${tasksToSave.length} rows`);
+  } else {
+    console.log('[CRM] tasks — nothing to upsert');
   }
 
   // מחיקת משימות שנמחקו
   const existingTasksQ = supabaseAdmin.from('tasks').select('id');
-  const { data: existingTasks = [] } = await (isAdmin
+  const { data: existingTasks = [], error: etErr } = await (isAdmin
     ? existingTasksQ
     : existingTasksQ.eq('assigned_to', uid));
+  if (etErr) console.error('[CRM] tasks select ERROR:', etErr);
   const incomingTaskIds = new Set((incoming.tasks ?? []).map((t: Row) => t.id));
   const tasksToDelete = (existingTasks ?? [])
     .filter((t: Row) => !incomingTaskIds.has(t.id))
     .map((t: Row) => t.id);
   if (tasksToDelete.length > 0) {
-    await supabaseAdmin.from('tasks').delete().in('id', tasksToDelete);
+    const { error: delErr } = await supabaseAdmin.from('tasks').delete().in('id', tasksToDelete);
+    if (delErr) console.error('[CRM] tasks delete ERROR:', delErr);
+    else console.log(`[CRM] tasks ✓ deleted ${tasksToDelete.length} rows`);
   }
 
   // ── לקוחות: upsert ────────────────────────────────────────────────────────
@@ -363,7 +386,10 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     const { error } = await supabaseAdmin
       .from('clients')
       .upsert(clientsToSave.map(clientToDb));
-    if (error) console.error('clients upsert error:', error);
+    if (error) console.error('[CRM] clients upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] clients ✓ upserted ${clientsToSave.length} rows`);
+  } else {
+    console.log('[CRM] clients — nothing to upsert');
   }
 
   // ── הודעות צ'אט: upsert ───────────────────────────────────────────────────
@@ -374,7 +400,10 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     const { error } = await supabaseAdmin
       .from('chat_messages')
       .upsert(chatToSave.map(chatToDb));
-    if (error) console.error('chat upsert error:', error);
+    if (error) console.error('[CRM] chat_messages upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] chat_messages ✓ upserted ${chatToSave.length} rows`);
+  } else {
+    console.log('[CRM] chat_messages — nothing to upsert');
   }
 
   // ── פתקיות: upsert + delete ───────────────────────────────────────────────
@@ -385,7 +414,10 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     const { error } = await supabaseAdmin
       .from('pinned_notes')
       .upsert(notesToSave.map(noteToDb));
-    if (error) console.error('notes upsert error:', error);
+    if (error) console.error('[CRM] pinned_notes upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] pinned_notes ✓ upserted ${notesToSave.length} rows`);
+  } else {
+    console.log('[CRM] pinned_notes — nothing to upsert');
   }
 
   // מחיקת פתקיות שנמחקו (רק שלי)
@@ -400,8 +432,11 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     .filter((n: Row) => !incomingNoteIds.has(n.id))
     .map((n: Row) => n.id);
   if (notesToDelete.length > 0) {
-    await supabaseAdmin.from('pinned_notes').delete().in('id', notesToDelete);
+    const { error } = await supabaseAdmin.from('pinned_notes').delete().in('id', notesToDelete);
+    if (error) console.error('[CRM] pinned_notes delete ERROR:', error);
+    else console.log(`[CRM] pinned_notes ✓ deleted ${notesToDelete.length} rows`);
   }
 
+  console.log('[CRM POST] ✓ done');
   return res.status(200).json({ saved: true });
 }

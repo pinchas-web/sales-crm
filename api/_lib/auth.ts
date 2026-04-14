@@ -16,11 +16,17 @@ export interface CrmUser {
  */
 export async function validateRequest(authHeader: string | undefined): Promise<CrmUser | null> {
   const token = authHeader?.replace('Bearer ', '').trim();
-  if (!token) return null;
+  if (!token) {
+    console.error('[CRM auth] FAILED: no Bearer token in Authorization header');
+    return null;
+  }
 
   // ולידציה קריפטוגרפית של ה-JWT מול Supabase Auth
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
+  if (error || !user) {
+    console.error('[CRM auth] FAILED: invalid JWT —', error?.message);
+    return null;
+  }
 
   // מציאת המשתמש ב-crm_users לפי auth UUID
   const { data: crmUser, error: dbError } = await supabaseAdmin
@@ -29,7 +35,11 @@ export async function validateRequest(authHeader: string | undefined): Promise<C
     .eq('auth_user_id', user.id)
     .single();
 
-  if (dbError || !crmUser) return null;
+  if (dbError || !crmUser) {
+    console.error(`[CRM auth] FAILED: auth_user_id=${user.id} not found in crm_users —`, dbError?.message);
+    return null;
+  }
 
+  console.log(`[CRM auth] ✓ uid=${crmUser.crm_user_id} role=${crmUser.role}`);
   return crmUser as CrmUser;
 }
