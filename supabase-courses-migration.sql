@@ -74,3 +74,9 @@ CREATE POLICY "Authenticated delete course files"
 ON storage.objects FOR DELETE
 TO authenticated
 USING (bucket_id = 'course-files');
+
+-- ════════════════════════════════════════════════════════
+-- עדכון: הוסף column_config לטבלת lessons
+-- הרץ אם כבר יצרת את הטבלאות קודם
+-- ════════════════════════════════════════════════════════
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS column_config JSONB DEFAULT '{}';

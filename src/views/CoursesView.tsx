@@ -92,6 +92,7 @@ export default function CoursesView({
                 onAddItem={onAddContentItem}
                 onUpdateItem={onUpdateContentItem}
                 onDeleteItem={onDeleteContentItem}
+                onUpdateLesson={onUpdateLesson}
               />
             </div>
           </>

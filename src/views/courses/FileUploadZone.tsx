@@ -81,7 +81,7 @@ export default function FileUploadZone({ onFilesAccepted, onVideoUrl, processing
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-colors"
         >
           <span>🎬</span>
-          <span>הוסף סרטון Vimeo</span>
+          <span>הוסף סרטון YouTube / Vimeo</span>
         </button>
       </div>
 
@@ -93,7 +93,7 @@ export default function FileUploadZone({ onFilesAccepted, onVideoUrl, processing
             value={videoUrl}
             onChange={e => setVideoUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleVideoSubmit()}
-            placeholder="https://vimeo.com/123456789"
+            placeholder="https://youtube.com/... או https://vimeo.com/..."
             className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-left"
             dir="ltr"
             autoFocus

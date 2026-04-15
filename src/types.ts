@@ -201,6 +201,8 @@ export interface Lesson {
   order: number;
   date?: string;
   description?: string;
+  columnOrder?: ContentType[];
+  columnLabels?: Partial<Record<ContentType, string>>;
 }
 
 export type ContentType = 'pdf' | 'pptx' | 'docx' | 'video' | 'image';

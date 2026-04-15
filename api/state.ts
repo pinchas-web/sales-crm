@@ -185,23 +185,29 @@ function courseToDb(c: Row): Row {
 
 function dbToLesson(r: Row): Row {
   return {
-    id:          r.id,
-    courseId:    r.course_id,
-    title:       r.title,
-    order:       r.order       ?? 0,
-    date:        r.date,
-    description: r.description,
+    id:           r.id,
+    courseId:     r.course_id,
+    title:        r.title,
+    order:        r.order        ?? 0,
+    date:         r.date,
+    description:  r.description,
+    columnOrder:  r.column_config?.columnOrder  ?? null,
+    columnLabels: r.column_config?.columnLabels ?? null,
   };
 }
 
 function lessonToDb(l: Row): Row {
   return {
-    id:          l.id,
-    course_id:   l.courseId,
-    title:       l.title       ?? '',
-    order:       l.order       ?? 0,
-    date:        l.date        ?? null,
-    description: l.description ?? null,
+    id:            l.id,
+    course_id:     l.courseId,
+    title:         l.title        ?? '',
+    order:         l.order        ?? 0,
+    date:          l.date         ?? null,
+    description:   l.description  ?? null,
+    column_config: {
+      columnOrder:  l.columnOrder  ?? null,
+      columnLabels: l.columnLabels ?? null,
+    },
   };
 }
 
