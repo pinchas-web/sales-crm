@@ -157,6 +157,86 @@ function noteToDb(n: Row): Row {
   };
 }
 
+// ── Courses ────────────────────────────────────────────────────────────────────
+
+function dbToCourse(r: Row): Row {
+  return {
+    id:          r.id,
+    title:       r.title,
+    description: r.description ?? '',
+    color:       r.color       ?? '#6366f1',
+    order:       r.order       ?? 0,
+    createdAt:   r.created_at,
+  };
+}
+
+function courseToDb(c: Row): Row {
+  return {
+    id:          c.id,
+    title:       c.title       ?? '',
+    description: c.description ?? '',
+    color:       c.color       ?? '#6366f1',
+    order:       c.order       ?? 0,
+    created_at:  c.createdAt,
+  };
+}
+
+// ── Lessons ────────────────────────────────────────────────────────────────────
+
+function dbToLesson(r: Row): Row {
+  return {
+    id:          r.id,
+    courseId:    r.course_id,
+    title:       r.title,
+    order:       r.order       ?? 0,
+    date:        r.date,
+    description: r.description,
+  };
+}
+
+function lessonToDb(l: Row): Row {
+  return {
+    id:          l.id,
+    course_id:   l.courseId,
+    title:       l.title       ?? '',
+    order:       l.order       ?? 0,
+    date:        l.date        ?? null,
+    description: l.description ?? null,
+  };
+}
+
+// ── Content Items ──────────────────────────────────────────────────────────────
+
+function dbToContentItem(r: Row): Row {
+  return {
+    id:             r.id,
+    lessonId:       r.lesson_id,
+    type:           r.type,
+    title:          r.title,
+    fileKey:        r.file_key,
+    fileUrl:        r.file_url,
+    thumbnails:     r.thumbnails       ?? [],
+    videoUrl:       r.video_url,
+    videoThumbnail: r.video_thumbnail,
+    order:          r.order            ?? 0,
+  };
+}
+
+function contentItemToDb(ci: Row): Row {
+  return {
+    id:              ci.id,
+    lesson_id:       ci.lessonId,
+    type:            ci.type,
+    title:           ci.title          ?? '',
+    file_key:        ci.fileKey        ?? null,
+    file_url:        ci.fileUrl        ?? null,
+    thumbnails:      ci.thumbnails     ?? [],
+    video_url:       ci.videoUrl       ?? null,
+    video_thumbnail: ci.videoThumbnail ?? null,
+    order:           ci.order          ?? 0,
+  };
+}
+
 // Activities and Tasks fields already match between frontend and DB (snake_case in both)
 
 // ════════════════════════════════════════════════════════════════════
@@ -211,6 +291,25 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     .eq('user_id', uid);
   const pinnedNotes = (rawNotes ?? []).map(dbToNote);
 
+  // קורסים — כולם גלויים לכולם (תוכן הוראה משותף)
+  const { data: rawCourses = [] } = await supabaseAdmin
+    .from('courses').select('*').order('order', { ascending: true });
+  const courses = (rawCourses ?? []).map(dbToCourse);
+
+  // שיעורים
+  const courseIds = courses.map(c => c.id as string);
+  const { data: rawLessons = [] } = courseIds.length > 0
+    ? await supabaseAdmin.from('lessons').select('*').in('course_id', courseIds).order('order', { ascending: true })
+    : { data: [] };
+  const lessons = (rawLessons ?? []).map(dbToLesson);
+
+  // פריטי תוכן
+  const lessonIds = lessons.map(l => l.id as string);
+  const { data: rawContentItems = [] } = lessonIds.length > 0
+    ? await supabaseAdmin.from('content_items').select('*').in('lesson_id', lessonIds).order('order', { ascending: true })
+    : { data: [] };
+  const contentItems = (rawContentItems ?? []).map(dbToContentItem);
+
   if (!config) {
     // הפעלה ראשונה — אין קונפיגורציה עדיין
     return res.status(200).json(null);
@@ -236,6 +335,10 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     clients,
     chatMessages,
     pinnedNotes,
+    // קורסים
+    courses,
+    lessons,
+    contentItems,
     currentUserId: uid,
   });
 }
@@ -401,6 +504,58 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     .map((n: Row) => n.id);
   if (notesToDelete.length > 0) {
     await supabaseAdmin.from('pinned_notes').delete().in('id', notesToDelete);
+  }
+
+  // ── קורסים: upsert + delete ───────────────────────────────────────────────
+  const coursesToSave: Row[] = incoming.courses ?? [];
+  if (coursesToSave.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('courses')
+      .upsert(coursesToSave.map(courseToDb));
+    if (error) console.error('courses upsert error:', error);
+  }
+  // מחיקת קורסים שנמחקו
+  const { data: existingCourses = [] } = await supabaseAdmin.from('courses').select('id');
+  const incomingCourseIds = new Set((incoming.courses ?? []).map((c: Row) => c.id));
+  const coursesToDelete = (existingCourses ?? [])
+    .filter((c: Row) => !incomingCourseIds.has(c.id))
+    .map((c: Row) => c.id);
+  if (coursesToDelete.length > 0) {
+    await supabaseAdmin.from('courses').delete().in('id', coursesToDelete);
+  }
+
+  // ── שיעורים: upsert + delete ──────────────────────────────────────────────
+  const lessonsToSave: Row[] = incoming.lessons ?? [];
+  if (lessonsToSave.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('lessons')
+      .upsert(lessonsToSave.map(lessonToDb));
+    if (error) console.error('lessons upsert error:', error);
+  }
+  const { data: existingLessons = [] } = await supabaseAdmin.from('lessons').select('id');
+  const incomingLessonIds = new Set((incoming.lessons ?? []).map((l: Row) => l.id));
+  const lessonsToDelete = (existingLessons ?? [])
+    .filter((l: Row) => !incomingLessonIds.has(l.id))
+    .map((l: Row) => l.id);
+  if (lessonsToDelete.length > 0) {
+    await supabaseAdmin.from('lessons').delete().in('id', lessonsToDelete);
+  }
+
+  // ── פריטי תוכן: upsert + delete ──────────────────────────────────────────
+  const contentItemsToSave: Row[] = incoming.contentItems ?? [];
+  if (contentItemsToSave.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('content_items')
+      .upsert(contentItemsToSave.map(contentItemToDb));
+    if (error) console.error('content_items upsert error:', error);
+  }
+  const { data: existingContent = [] } = await supabaseAdmin.from('content_items').select('id');
+  const incomingContentIds = new Set((incoming.contentItems ?? []).map((ci: Row) => ci.id));
+  const contentToDelete = (existingContent ?? [])
+    .filter((ci: Row) => !incomingContentIds.has(ci.id))
+    .map((ci: Row) => ci.id);
+  if (contentToDelete.length > 0) {
+    await supabaseAdmin.from('content_items').delete().in('id', contentToDelete);
   }
 
   return res.status(200).json({ saved: true });

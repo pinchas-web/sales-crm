@@ -108,3 +108,41 @@ export async function apiDeleteUser(crm_user_id: string): Promise<{ ok: boolean 
   });
   return res.json();
 }
+
+// ── Course file storage ────────────────────────────────────────────────────────
+
+const COURSE_FILES_BUCKET   = 'course-files';
+
+/**
+ * מעלה קובץ ל-Supabase Storage (bucket: course-files).
+ * מחזיר { fileKey, fileUrl } — או זורק שגיאה.
+ */
+export async function apiUploadCourseFile(
+  file: File,
+  folder = 'uploads',
+): Promise<{ fileKey: string; fileUrl: string }> {
+  const ext     = file.name.split('.').pop() ?? 'bin';
+  const fileKey = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from(COURSE_FILES_BUCKET)
+    .upload(fileKey, file, { upsert: false });
+
+  if (error) throw new Error(`Upload failed: ${error.message}`);
+
+  const { data } = supabase.storage
+    .from(COURSE_FILES_BUCKET)
+    .getPublicUrl(fileKey);
+
+  return { fileKey, fileUrl: data.publicUrl };
+}
+
+/**
+ * מוחק קובץ מ-Supabase Storage.
+ */
+export async function apiDeleteCourseFile(fileKey: string): Promise<void> {
+  const { error } = await supabase.storage
+    .from(COURSE_FILES_BUCKET)
+    .remove([fileKey]);
+  if (error) console.error('Delete file error:', error);
+}

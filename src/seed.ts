@@ -22,7 +22,8 @@ export const SEED_STATE: AppState = {
     { id: 'tasks',    visible: true,  order: 4 },
     { id: 'data',     visible: true,  order: 5 },
     { id: 'chat',     visible: true,  order: 6 },
-    { id: 'settings', visible: true,  order: 7 },
+    { id: 'courses',  visible: true,  order: 7 },
+    { id: 'settings', visible: true,  order: 8 },
   ],
 
   users: [
@@ -236,4 +237,9 @@ export const SEED_STATE: AppState = {
       actionTaskDaysOffset: 0,
     },
   ],
+
+  // ─── Courses (empty by default) ─────────────────────────────────────────────
+  courses:      [],
+  lessons:      [],
+  contentItems: [],
 };

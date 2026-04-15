@@ -183,6 +183,41 @@ export interface NavTabConfig {
   order: number;
 }
 
+// ─── Courses ──────────────────────────────────────────────────────────────────
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string;
+  color: string;       // hex color, e.g. '#6366f1'
+  order: number;
+  createdAt: string;
+}
+
+export interface Lesson {
+  id: string;
+  courseId: string;
+  title: string;
+  order: number;
+  date?: string;
+  description?: string;
+}
+
+export type ContentType = 'pdf' | 'pptx' | 'docx' | 'video' | 'image';
+
+export interface ContentItem {
+  id: string;
+  lessonId: string;
+  type: ContentType;
+  title: string;
+  fileKey?: string;        // Supabase Storage key
+  fileUrl?: string;        // public download URL
+  thumbnails: string[];    // slide/page preview image URLs (data URLs or Supabase URLs)
+  videoUrl?: string;       // Vimeo embed URL
+  videoThumbnail?: string; // Vimeo thumbnail image URL
+  order: number;
+}
+
 // ─── App State ────────────────────────────────────────────────────────────────
 
 export interface AppState {
@@ -197,6 +232,10 @@ export interface AppState {
   chatMessages: ChatMessage[];
   pinnedNotes: PinnedNote[];
   automationRules: AutomationRule[];
+  // courses
+  courses: Course[];
+  lessons: Lesson[];
+  contentItems: ContentItem[];
   // config
   dropdownOptions: DropdownOptions;
   customFields: CustomField[];

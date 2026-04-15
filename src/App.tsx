@@ -3,16 +3,18 @@
  * מנהל state גלובלי, כל ה-handlers, מנוע האוטומציות, והניווט.
  * Auth: Supabase → JWT → /api/state (Vercel Serverless Functions)
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, apiLoadState, apiSaveState } from './api';
-import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, PinnedNote, CustomField } from './types';
+import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, PinnedNote, CustomField, Course, Lesson, ContentItem } from './types';
 import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
 
 import LoginScreen   from './views/LoginScreen';
 import HomePage      from './views/HomePage';
 import LeadsView     from './views/LeadsView';
+// טעינה עצלה — CoursesView כולל pdfjs-dist, מופרד לchunk נפרד
+const CoursesView = lazy(() => import('./views/CoursesView'));
 import ClientsView   from './views/ClientsView';
 import ProductsView  from './views/ProductsView';
 import TasksView     from './views/TasksView';
@@ -430,6 +432,44 @@ export default function App() {
       ),
     })), []);
 
+  // ── Courses handlers ──────────────────────────────────────────────────────
+
+  const handleAddCourse = useCallback((course: Course) =>
+    setState(s => ({ ...s, courses: [...s.courses, course] })), []);
+
+  const handleUpdateCourse = useCallback((id: string, updates: Partial<Course>) =>
+    setState(s => ({ ...s, courses: s.courses.map(c => c.id === id ? { ...c, ...updates } : c) })), []);
+
+  const handleDeleteCourse = useCallback((id: string) =>
+    setState(s => ({
+      ...s,
+      courses:      s.courses.filter(c => c.id !== id),
+      lessons:      s.lessons.filter(l => l.courseId !== id),
+      contentItems: s.contentItems.filter(ci => !s.lessons.filter(l => l.courseId === id).map(l => l.id).includes(ci.lessonId)),
+    })), []);
+
+  const handleAddLesson = useCallback((lesson: Lesson) =>
+    setState(s => ({ ...s, lessons: [...s.lessons, lesson] })), []);
+
+  const handleUpdateLesson = useCallback((id: string, updates: Partial<Lesson>) =>
+    setState(s => ({ ...s, lessons: s.lessons.map(l => l.id === id ? { ...l, ...updates } : l) })), []);
+
+  const handleDeleteLesson = useCallback((id: string) =>
+    setState(s => ({
+      ...s,
+      lessons:      s.lessons.filter(l => l.id !== id),
+      contentItems: s.contentItems.filter(ci => ci.lessonId !== id),
+    })), []);
+
+  const handleAddContentItem = useCallback((item: ContentItem) =>
+    setState(s => ({ ...s, contentItems: [...s.contentItems, item] })), []);
+
+  const handleUpdateContentItem = useCallback((id: string, updates: Partial<ContentItem>) =>
+    setState(s => ({ ...s, contentItems: s.contentItems.map(ci => ci.id === id ? { ...ci, ...updates } : ci) })), []);
+
+  const handleDeleteContentItem = useCallback((id: string) =>
+    setState(s => ({ ...s, contentItems: s.contentItems.filter(ci => ci.id !== id) })), []);
+
   // ── Full state update for settings ────────────────────────────────────────
 
   const handleUpdateState = useCallback((newState: AppState) => setState(newState), []);
@@ -446,6 +486,7 @@ export default function App() {
     { id: 'tasks',    icon: '✅', defaultLabel: 'משימות'  },
     { id: 'data',     icon: '📊', defaultLabel: 'נתונים'  },
     { id: 'chat',     icon: '💬', defaultLabel: "צ'אט"    },
+    { id: 'courses',  icon: '📚', defaultLabel: 'קורסים'  },
     { id: 'settings', icon: '⚙️', defaultLabel: 'הגדרות'  },
   ];
 
@@ -595,6 +636,26 @@ export default function App() {
         )}
         {activeTab === 'data'     && <DataView      state={effectiveState} />}
         {activeTab === 'chat'     && <ChatView      state={effectiveState} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
+        {activeTab === 'courses'  && (
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-64 text-indigo-600">
+              <span className="animate-pulse text-4xl">📚</span>
+            </div>
+          }>
+            <CoursesView
+              state={effectiveState}
+              onAddCourse={handleAddCourse}
+              onUpdateCourse={handleUpdateCourse}
+              onDeleteCourse={handleDeleteCourse}
+              onAddLesson={handleAddLesson}
+              onUpdateLesson={handleUpdateLesson}
+              onDeleteLesson={handleDeleteLesson}
+              onAddContentItem={handleAddContentItem}
+              onUpdateContentItem={handleUpdateContentItem}
+              onDeleteContentItem={handleDeleteContentItem}
+            />
+          </Suspense>
+        )}
         {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>
 
