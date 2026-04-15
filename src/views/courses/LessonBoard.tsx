@@ -9,7 +9,7 @@ import type { ContentItem, ContentType, Lesson } from '../../types';
 import { apiUploadCourseFile } from '../../api';
 import ContentCard from './ContentCard';
 import FileUploadZone from './FileUploadZone';
-import { useContentProcessor, detectContentType } from './useContentProcessor';
+import { useContentProcessor } from './useContentProcessor';
 
 const COLUMN_ORDER: ContentType[] = ['pptx', 'pdf', 'docx', 'video', 'image'];
 
