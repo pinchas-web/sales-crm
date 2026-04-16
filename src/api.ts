@@ -53,6 +53,7 @@ export async function apiLoadState(): Promise<unknown | null> {
  * הServerless function מאמת בעלות — נציג לא יכול לשמור נתונים של אחרים.
  */
 export async function apiSaveState(state: unknown): Promise<void> {
+  console.log('[CRM] apiSaveState called — sending POST /api/state');
   const res = await fetch('/api/state', {
     method: 'POST',
     headers: await authHeaders(),
@@ -60,8 +61,13 @@ export async function apiSaveState(state: unknown): Promise<void> {
   });
 
   if (!res.ok) {
-    console.error(`CRM API: POST /api/state failed — ${res.status}`);
+    const body = await res.text().catch(() => '');
+    console.error(`[CRM] POST /api/state FAILED — ${res.status} ${res.statusText}`, body);
+    throw new Error(`CRM save failed: ${res.status} ${res.statusText}`);
   }
+
+  const result = await res.json().catch(() => ({}));
+  console.log('[CRM] apiSaveState ✓ success', result);
 }
 
 /**

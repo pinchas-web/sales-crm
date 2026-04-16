@@ -209,11 +209,12 @@ export default function App() {
     }
   }, [session]);
 
-  // שמירה אוטומטית בכל שינוי state
+  // שמירה אוטומטית בכל שינוי state (או כשהטעינה מסתיימת)
   useEffect(() => {
     if (loading || !session) return;
-    apiSaveState(state).catch(err => console.error('CRM: failed to save state', err));
-  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+    console.log('[CRM] state changed — triggering save. leads:', state.leads.length, 'tasks:', state.tasks.length, 'activities:', state.activities.length);
+    apiSaveState(state).catch(err => console.error('[CRM] save FAILED:', err));
+  }, [state, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Run no_activity automations on mount
   useEffect(() => {
