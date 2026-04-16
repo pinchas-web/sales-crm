@@ -536,9 +536,9 @@ async function renderPptxSlide(
           : (tc.lt1 ?? '#FFFFFF');  // dark background  → light text
       }
 
-      // ── Font: try named font first, then fallback to Almoni-friendly stack ──
+      // ── Font: named font → Almoni variants → Hebrew fallbacks ──────────────
       const safeFontName = (line.fontName || 'Arial').replace(/'/g, "\\'");
-      ctx.font = `${line.italic ? 'italic ' : ''}${line.bold ? 'bold ' : ''}${line.pxSz}px '${safeFontName}', 'Almoni CLM', 'Almoni Tzar CLM', 'Arial Hebrew', Heebo, Arial, sans-serif`;
+      ctx.font = `${line.italic ? 'italic ' : ''}${line.bold ? 'bold ' : ''}${line.pxSz}px '${safeFontName}', 'Almoni AAA', 'Almoni DL AAA', 'Almoni Neue AAA', 'Almoni CLM', 'Almoni Tzar CLM', 'Arial Hebrew', Heebo, Arial, sans-serif`;
       ctx.textBaseline = 'top';
       ctx.fillStyle    = fillColor;
 
@@ -580,8 +580,29 @@ async function renderPptxSlide(
   return canvasToDataUrl(canvas, 0.93);
 }
 
+// ── Font preload ────────────────────────────────────────────────────────────────
+
+let _fontsLoaded = false;
+async function preloadAlmoniFonts(): Promise<void> {
+  if (_fontsLoaded) return;
+  try {
+    const variants = [
+      '400 16px "Almoni AAA"',
+      '500 16px "Almoni AAA"',
+      '700 16px "Almoni AAA"',
+      '400 16px "Almoni DL AAA"',
+      '700 16px "Almoni DL AAA"',
+      '400 16px "Almoni Neue AAA"',
+      '700 16px "Almoni Neue AAA"',
+    ];
+    await Promise.all(variants.map(v => document.fonts.load(v).catch(() => {})));
+    _fontsLoaded = true;
+  } catch { /* not a browser env or fonts not available */ }
+}
+
 /** Main PPTX entry — processes all slides in order */
 async function extractPptxThumbnails(file: File): Promise<string[]> {
+  await preloadAlmoniFonts();
   const zip = await JSZip.loadAsync(file);
 
   const slideFiles = Object.keys(zip.files)

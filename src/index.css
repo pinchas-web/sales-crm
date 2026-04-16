@@ -4,6 +4,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Almoni AAA — brand font family ──────────────────────────────────────── */
+@font-face {
+  font-family: 'Almoni AAA';
+  src: url('/fonts/almoni-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almoni AAA';
+  src: url('/fonts/almoni-medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almoni AAA';
+  src: url('/fonts/almoni-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+/* Alias: "Almoni DL AAA" — common variant name used in PPTX files */
+@font-face {
+  font-family: 'Almoni DL AAA';
+  src: url('/fonts/almoni-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almoni DL AAA';
+  src: url('/fonts/almoni-medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almoni DL AAA';
+  src: url('/fonts/almoni-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+/* Alias: "Almoni Neue AAA" — another variant name seen in slides */
+@font-face {
+  font-family: 'Almoni Neue AAA';
+  src: url('/fonts/almoni-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almoni Neue AAA';
+  src: url('/fonts/almoni-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -11,7 +71,7 @@
 body {
   margin: 0;
   direction: rtl;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Almoni AAA', 'Almoni DL AAA', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #f3f4f6;
   min-height: 100vh;
 }
