@@ -1,55 +1,69 @@
 /**
  * FileUploadZone — אזור גרירה להעלאת קבצים לשיעור.
  * תומך ב: PDF, PPTX, DOCX, תמונות.
- * טיפול בסרטון Vimeo נעשה בנפרד דרך כפתור "הוסף קישור".
+ * פותר בעיות MIME-type של Windows ע"י recovery לפי סיומת קובץ.
  */
 import { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import type { ContentType } from '../../types';
 import { detectContentType } from './useContentProcessor';
 
-interface FileUploadZoneProps {
-  onFilesAccepted: (files: { file: File; type: ContentType }[]) => void;
-  onVideoUrl: (url: string) => void;
-  processing?: boolean;
+// כל הסיומות שאנו מקבלים
+const ALLOWED_EXTS = new Set([
+  '.pdf', '.ppt', '.pptx', '.doc', '.docx',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+]);
+
+function extOf(name: string): string {
+  return '.' + (name.split('.').pop()?.toLowerCase() ?? '');
 }
 
-export default function FileUploadZone({ onFilesAccepted, onVideoUrl, processing = false }: FileUploadZoneProps) {
+interface FileUploadZoneProps {
+  onFilesAccepted: (files: { file: File; type: ContentType }[]) => void;
+  onVideoUrl:      (url: string) => void;
+  processing?:     boolean;
+}
+
+export default function FileUploadZone({
+  onFilesAccepted, onVideoUrl, processing = false,
+}: FileUploadZoneProps) {
   const [showVideoInput, setShowVideoInput] = useState(false);
   const [videoUrl, setVideoUrl]             = useState('');
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const mapped = acceptedFiles.map(file => ({
-      file,
-      type: detectContentType(file.name),
-    }));
-    onFilesAccepted(mapped);
-  }, [onFilesAccepted]);
+  /**
+   * React-dropzone הופך קבצים ל"נדחים" אם סוג ה-MIME לא מוכר (נפוץ ב-Windows).
+   * הפתרון: גם קבצים "נדחים" שיש להם סיומת חוקית — מתקבלים.
+   */
+  const onDrop = useCallback(
+    (accepted: File[], rejected: FileRejection[]) => {
+      // קבצים שנדחו בגלל MIME אבל הסיומת בסדר — נחזיר אותם
+      const recovered = rejected
+        .filter(r => ALLOWED_EXTS.has(extOf(r.file.name)))
+        .map(r => r.file);
 
-  const ALLOWED_EXTS = new Set(['.pdf','.ppt','.pptx','.doc','.docx','.png','.jpg','.jpeg','.gif','.webp']);
+      const all = [...accepted, ...recovered];
+      if (all.length > 0) {
+        onFilesAccepted(all.map(f => ({ file: f, type: detectContentType(f.name) })));
+      }
+    },
+    [onFilesAccepted],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    // Accept both explicit MIME types AND fallback for Windows (octet-stream / zip)
+    // accept: נשמר רק לצורך סינון תיבת הדו-שיח של מערכת ההפעלה
     accept: {
-      'application/pdf':       ['.pdf'],
+      'application/pdf':         ['.pdf'],
       'application/vnd.ms-powerpoint': ['.ppt'],
       'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-      'application/msword':    ['.doc'],
+      'application/msword':      ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document':   ['.docx'],
-      'image/*':               ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
-      // Windows fallbacks — MIME type may be generic
-      'application/zip':             ['.pptx', '.docx'],
-      'application/x-zip-compressed':['.pptx', '.docx'],
-      'application/octet-stream':    ['.pdf', '.ppt', '.pptx', '.doc', '.docx'],
-    },
-    // Extension-based validator as safety net (covers edge cases)
-    validator: (file) => {
-      const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
-      return ALLOWED_EXTS.has(ext) ? null : {
-        code: 'file-invalid-type',
-        message: `סוג קובץ לא נתמך: ${ext}`,
-      };
+      'image/*':                 ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
+      // Windows MIME fallbacks
+      'application/zip':              ['.pptx', '.docx'],
+      'application/x-zip-compressed': ['.pptx', '.docx'],
+      'application/octet-stream':     ['.pdf', '.ppt', '.pptx', '.doc', '.docx'],
+      'application/vnd.ms-office':    ['.pptx', '.docx', '.ppt', '.doc'],
     },
     multiple: true,
     disabled: processing,
@@ -100,7 +114,7 @@ export default function FileUploadZone({ onFilesAccepted, onVideoUrl, processing
         </button>
       </div>
 
-      {/* שדה קישור Vimeo */}
+      {/* שדה קישור וידאו */}
       {showVideoInput && (
         <div className="flex gap-2 items-center bg-white border border-gray-200 rounded-xl p-3">
           <input

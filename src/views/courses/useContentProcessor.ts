@@ -1,7 +1,14 @@
 /**
  * useContentProcessor — מעבד קבצים ומייצר thumbnails.
- * PPTX: רנדרר canvas מלא — רקע + תמונות במיקום + טקסט במיקום.
- * PDF: pdfjs-dist. DOCX: JSZip. תמונות: ישיר. Video: YouTube / Vimeo oEmbed.
+ *
+ * PPTX: רנדרר canvas מלא —
+ *   • ניתוח theme.xml לצבעים אמיתיים (schemeClr → hex)
+ *   • lumMod / lumOff / shade / tint transformations
+ *   • דגימת בהירות רקע לצבע טקסט אוטומטי כשאין צבע מפורש
+ *   • גדלי גופן מהפלייסהולדר (title=48, body=24 וכו')
+ *   • תמונות במיקום מדויק, היפוך, שקיפות
+ *
+ * PDF: pdfjs-dist  |  DOCX: JSZip  |  Video: YouTube + Vimeo oEmbed
  */
 import { useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -15,7 +22,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 // ── Generic helpers ────────────────────────────────────────────────────────────
 
-function canvasToDataUrl(canvas: HTMLCanvasElement, q = 0.88): string {
+function canvasToDataUrl(canvas: HTMLCanvasElement, q = 0.9): string {
   return canvas.toDataURL('image/jpeg', q);
 }
 
@@ -43,12 +50,82 @@ async function renderPdfPage(
   return canvasToDataUrl(canvas);
 }
 
+// ── Color utilities ────────────────────────────────────────────────────────────
+
+function hexToHSL(hex: string): [number, number, number] {
+  const h6 = hex.replace('#', '').slice(-6).padStart(6, '0');
+  const r  = parseInt(h6.slice(0, 2), 16) / 255;
+  const g  = parseInt(h6.slice(2, 4), 16) / 255;
+  const b  = parseInt(h6.slice(4, 6), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let   hh = 0, ss = 0;
+  const ll = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    ss = ll > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    switch (mx) {
+      case r: hh = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: hh = ((b - r) / d + 2) / 6;                break;
+      case b: hh = ((r - g) / d + 4) / 6;                break;
+    }
+  }
+  return [hh, ss, ll];
+}
+
+function hslToHex(hh: number, ss: number, ll: number): string {
+  const clamp = (x: number) => Math.max(0, Math.min(1, x));
+  if (ss === 0) {
+    const v = Math.round(clamp(ll) * 255).toString(16).padStart(2, '0');
+    return '#' + v + v + v;
+  }
+  const q = ll < 0.5 ? ll * (1 + ss) : ll + ss - ll * ss;
+  const p = 2 * ll - q;
+  const h2r = (t: number) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const toH = (x: number) => Math.round(clamp(h2r(x)) * 255).toString(16).padStart(2, '0');
+  return '#' + toH(hh + 1 / 3) + toH(hh) + toH(hh - 1 / 3);
+}
+
+/** Apply lumMod / lumOff / shade / tint children of a color element */
+function applyMods(hex: string, el: Element): string {
+  const v = (tag: string) => el.querySelector(tag)?.getAttribute('val');
+  const lm = v('lumMod'), lo = v('lumOff'), sh = v('shade'), ti = v('tint');
+  if (!lm && !lo && !sh && !ti) return hex;
+  let [h, s, l] = hexToHSL(hex);
+  if (lm) l  = l * parseInt(lm) / 100000;
+  if (lo) l  = l + parseInt(lo) / 100000;
+  if (sh) l  = l * parseInt(sh) / 100000;
+  if (ti) l  = l + (1 - l) * parseInt(ti) / 100000;
+  return hslToHex(h, s, Math.max(0, Math.min(1, l)));
+}
+
+type ThemeColors = Record<string, string>;
+
+/** Resolve solidFill element → '#RRGGBB' using parsed theme colors */
+function resolveClr(solidEl: Element | null, tc: ThemeColors): string | null {
+  if (!solidEl) return null;
+  const srgb   = kid(solidEl, 'srgbClr');
+  const scheme = kid(solidEl, 'schemeClr');
+  if (srgb) {
+    return applyMods('#' + (srgb.getAttribute('val') ?? '000000'), srgb);
+  }
+  if (scheme) {
+    const name  = scheme.getAttribute('val') ?? '';
+    const alias: Record<string, string> = { tx1: 'dk1', tx2: 'dk2', bg1: 'lt1', bg2: 'lt2' };
+    const norm  = alias[name] ?? name;
+    const base  = tc[norm] ?? (norm.startsWith('lt') ? '#FFFFFF' : '#1E293B');
+    return applyMods(base, scheme);
+  }
+  return null;
+}
+
 // ── XML helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Strip XML namespace prefixes so querySelector works cleanly.
- * <p:sp> → <sp>   <a:t> → <t>   r:embed="rId2" → embed="rId2"
- */
 function stripNs(xml: string): string {
   return xml
     .replace(/\s+xmlns(?::[a-zA-Z0-9_]+)?="[^"]*"/g, '')
@@ -56,53 +133,97 @@ function stripNs(xml: string): string {
     .replace(/\s[a-zA-Z0-9_]+:([a-zA-Z0-9_.-]+)=/g, ' $1=');
 }
 
-/** EMU → canvas pixels */
 function emu(val: string | null | undefined, scale: number): number {
   if (!val) return 0;
   const n = parseInt(val, 10);
   return isNaN(n) ? 0 : n * scale;
 }
 
-/** First direct child with the given tag */
 function kid(el: Element, tag: string): Element | null {
   for (const c of el.children) if (c.tagName === tag) return c;
   return null;
 }
 
-/** Draw an image at given bounds; resolves even on error */
 function drawImg(
   ctx: CanvasRenderingContext2D,
   src: string,
   x: number, y: number, w: number, h: number,
 ): Promise<void> {
   return new Promise(resolve => {
-    const img = new Image();
-    img.onload  = () => { ctx.drawImage(img, x, y, w, h); resolve(); };
-    img.onerror = () => resolve();
-    img.src = src;
+    const img    = new Image();
+    img.onload   = () => { ctx.drawImage(img, x, y, w, h); resolve(); };
+    img.onerror  = () => resolve();
+    img.src      = src;
   });
 }
 
-// ── PPTX full-fidelity renderer ─────────────────────────────────────────────────
+/** Sample average brightness (0–1) of a canvas region */
+function sampleBrightness(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+): number {
+  try {
+    const cw = ctx.canvas.width, ch = ctx.canvas.height;
+    const ix = Math.max(0, Math.floor(x));
+    const iy = Math.max(0, Math.floor(y));
+    const iw = Math.min(Math.floor(w), cw - ix);
+    const ih = Math.min(Math.floor(h), ch - iy);
+    if (iw <= 0 || ih <= 0) return 0.5;
+    const d = ctx.getImageData(ix, iy, iw, ih).data;
+    let   s = 0;
+    for (let i = 0; i < d.length; i += 4)
+      s += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    return s / (d.length / 4) / 255;
+  } catch { return 0.5; }
+}
 
-/** Data shared across all slides of one PPTX file */
+// ── PPTX context ────────────────────────────────────────────────────────────────
+
 interface PptxCtx {
-  zip: JSZip;
-  slideW: number;
-  slideH: number;
+  zip:           JSZip;
+  slideW:        number;          // EMU
+  slideH:        number;          // EMU
+  themeColors:   ThemeColors;     // schemeClr → '#RRGGBB'
   masterBgColor: string | null;
   masterBgImage: string | null;
 }
 
-/** Read slide dimensions + master background, once per file */
+async function loadThemeColors(zip: JSZip): Promise<ThemeColors> {
+  const colors: ThemeColors = {};
+  for (let i = 1; i <= 3; i++) {
+    const f = zip.file(`ppt/theme/theme${i}.xml`);
+    if (!f) continue;
+    const doc = new DOMParser().parseFromString(
+      stripNs(await f.async('string')), 'text/xml',
+    );
+    const cs = doc.querySelector('clrScheme');
+    if (!cs) continue;
+    for (const child of cs.children) {
+      const name = child.tagName;
+      const srgb = kid(child, 'srgbClr');
+      const sys  = kid(child, 'sysClr');
+      if      (srgb) colors[name] = '#' + srgb.getAttribute('val');
+      else if (sys)  colors[name] = '#' + (sys.getAttribute('lastClr') ?? '000000');
+    }
+    break;
+  }
+  // Canonical aliases
+  if (colors.dk1) colors.tx1 = colors.dk1;
+  if (colors.lt1) colors.bg1 = colors.lt1;
+  if (colors.dk2) colors.tx2 = colors.dk2;
+  if (colors.lt2) colors.bg2 = colors.lt2;
+  return colors;
+}
+
 async function buildPptxCtx(zip: JSZip): Promise<PptxCtx> {
-  // Slide dimensions from presentation.xml
+  // Slide size
   let slideW = 9144000, slideH = 6858000;
-  const presFile = zip.file('ppt/presentation.xml');
-  if (presFile) {
-    const xml = stripNs(await presFile.async('string'));
-    const doc = new DOMParser().parseFromString(xml, 'text/xml');
-    const sz  = doc.querySelector('sldSz');
+  const pf = zip.file('ppt/presentation.xml');
+  if (pf) {
+    const doc = new DOMParser().parseFromString(
+      stripNs(await pf.async('string')), 'text/xml',
+    );
+    const sz = doc.querySelector('sldSz');
     if (sz) {
       const cx = parseInt(sz.getAttribute('cx') ?? '0');
       const cy = parseInt(sz.getAttribute('cy') ?? '0');
@@ -110,18 +231,22 @@ async function buildPptxCtx(zip: JSZip): Promise<PptxCtx> {
     }
   }
 
-  // Master background (slideMaster1)
+  // Theme colors
+  const themeColors = await loadThemeColors(zip);
+
+  // Master background
   let masterBgColor: string | null = null;
   let masterBgImage: string | null = null;
 
-  const masterFile = zip.file('ppt/slideMasters/slideMaster1.xml');
-  if (masterFile) {
-    const mXml = stripNs(await masterFile.async('string'));
-    const mDoc = new DOMParser().parseFromString(mXml, 'text/xml');
-    const bgPr = mDoc.querySelector('bg bgPr');
+  const mf = zip.file('ppt/slideMasters/slideMaster1.xml');
+  if (mf) {
+    const doc  = new DOMParser().parseFromString(
+      stripNs(await mf.async('string')), 'text/xml',
+    );
+    const bgPr = doc.querySelector('bg bgPr');
     if (bgPr) {
-      const sc = bgPr.querySelector('solidFill srgbClr');
-      if (sc) masterBgColor = '#' + (sc.getAttribute('val') ?? 'FFFFFF');
+      const solid = kid(bgPr, 'solidFill');
+      if (solid) masterBgColor = resolveClr(solid, themeColors);
 
       const blip = bgPr.querySelector('blipFill blip');
       if (blip) {
@@ -131,15 +256,15 @@ async function buildPptxCtx(zip: JSZip): Promise<PptxCtx> {
           const rDoc = new DOMParser().parseFromString(
             await relFile.async('string'), 'text/xml',
           );
-          const rel = [...rDoc.querySelectorAll('Relationship')].find(
+          const rel  = [...rDoc.querySelectorAll('Relationship')].find(
             r => r.getAttribute('Id') === rId && (r.getAttribute('Type') ?? '').includes('/image'),
           );
           if (rel) {
             const t  = rel.getAttribute('Target') ?? '';
             const p  = t.startsWith('../') ? 'ppt/' + t.slice(3) : `ppt/slideMasters/${t}`;
-            const mf = zip.file(p);
-            if (mf) {
-              try { masterBgImage = await blobToDataUrl(await mf.async('blob')); } catch { /* ignore */ }
+            const img = zip.file(p);
+            if (img) {
+              try { masterBgImage = await blobToDataUrl(await img.async('blob')); } catch { /* ignore */ }
             }
           }
         }
@@ -147,37 +272,28 @@ async function buildPptxCtx(zip: JSZip): Promise<PptxCtx> {
     }
   }
 
-  return { zip, slideW, slideH, masterBgColor, masterBgImage };
+  return { zip, slideW, slideH, themeColors, masterBgColor, masterBgImage };
 }
 
-/** Load rId → data URL map for one slide */
 async function loadMediaMap(zip: JSZip, slideNum: string): Promise<Map<string, string>> {
-  const map      = new Map<string, string>();
-  const relsFile = zip.file(`ppt/slides/_rels/slide${slideNum}.xml.rels`);
-  if (!relsFile) return map;
-
-  const rDoc = new DOMParser().parseFromString(
-    await relsFile.async('string'), 'text/xml',
-  );
+  const map  = new Map<string, string>();
+  const rf   = zip.file(`ppt/slides/_rels/slide${slideNum}.xml.rels`);
+  if (!rf) return map;
+  const rDoc = new DOMParser().parseFromString(await rf.async('string'), 'text/xml');
   for (const rel of rDoc.querySelectorAll('Relationship')) {
     const id   = rel.getAttribute('Id')     ?? '';
     const tgt  = rel.getAttribute('Target') ?? '';
     const type = rel.getAttribute('Type')   ?? '';
     if (!type.includes('/image')) continue;
-
     const path = tgt.startsWith('../') ? 'ppt/' + tgt.slice(3)
       : tgt.startsWith('/') ? tgt.slice(1)
       : `ppt/slides/${tgt}`;
-
     const mf = zip.file(path);
-    if (mf) {
-      try { map.set(id, await blobToDataUrl(await mf.async('blob'))); } catch { /* ignore */ }
-    }
+    if (mf) try { map.set(id, await blobToDataUrl(await mf.async('blob'))); } catch { /* ignore */ }
   }
   return map;
 }
 
-/** Flatten sp / pic elements, recursing into grpSp */
 function flattenSpTree(container: Element): Element[] {
   const out: Element[] = [];
   for (const c of container.children) {
@@ -187,24 +303,27 @@ function flattenSpTree(container: Element): Element[] {
   return out;
 }
 
-/** Render one PPTX slide to a 960×540 JPEG data URL */
+/** Render one slide → 960×540 JPEG data URL */
 async function renderPptxSlide(
   pctx: PptxCtx,
   slideFile: string,
   slideNum: string,
 ): Promise<string> {
-  const W = 960, H = 540;
+  const W  = 960, H = 540;
   const sx = W / pctx.slideW;
   const sy = H / pctx.slideH;
+  const tc = pctx.themeColors;
 
   const canvas = document.createElement('canvas');
   canvas.width  = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
 
-  // 1. Master background (base layer)
+  // 1. White base
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, W, H);
+
+  // 2. Master background
   if (pctx.masterBgImage) {
     await drawImg(ctx, pctx.masterBgImage, 0, 0, W, H);
   } else if (pctx.masterBgColor) {
@@ -212,30 +331,31 @@ async function renderPptxSlide(
     ctx.fillRect(0, 0, W, H);
   }
 
-  // 2. Load slide media
+  // 3. Media map for this slide
   const mediaMap = await loadMediaMap(pctx.zip, slideNum);
 
-  // 3. Parse slide XML
+  // 4. Parse slide XML
   const raw = await pctx.zip.file(slideFile)!.async('string');
   const doc = new DOMParser().parseFromString(stripNs(raw), 'text/xml');
 
-  // 4. Slide-specific background (overrides master)
+  // 5. Slide-specific background
   const bgPr = doc.querySelector('bg bgPr');
   if (bgPr) {
-    const sc = bgPr.querySelector('solidFill srgbClr');
-    if (sc) {
-      ctx.fillStyle = '#' + (sc.getAttribute('val') ?? 'FFFFFF');
-      ctx.fillRect(0, 0, W, H);
+    const solid = kid(bgPr, 'solidFill');
+    if (solid) {
+      const c = resolveClr(solid, tc);
+      if (c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
     }
-    const gf = bgPr.querySelector('gradFill');
-    if (gf && !sc) {
+    const gf = kid(bgPr, 'gradFill');
+    if (gf) {
       const stops = [...gf.querySelectorAll('gs')];
       if (stops.length >= 2) {
         const grad = ctx.createLinearGradient(0, 0, W, H);
         for (const s of stops) {
-          const pos = parseInt(s.getAttribute('pos') ?? '0') / 100000;
-          const clr = s.querySelector('srgbClr')?.getAttribute('val') ?? 'DDEEFF';
-          try { grad.addColorStop(pos, '#' + clr); } catch { /* ignore */ }
+          const pos  = parseInt(s.getAttribute('pos') ?? '0') / 100000;
+          const sf   = kid(s, 'solidFill') ?? s;
+          const clr  = resolveClr(sf, tc) ?? '#DDEEFF';
+          try { grad.addColorStop(pos, clr); } catch { /* ignore */ }
         }
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
@@ -248,28 +368,24 @@ async function renderPptxSlide(
     }
   }
 
-  // 5. Render all spTree elements in z-order
+  // 6. Render spTree
   const spTree = doc.querySelector('spTree');
   if (!spTree) return canvasToDataUrl(canvas);
 
   for (const el of flattenSpTree(spTree)) {
 
-    // ── Picture ────────────────────────────────────────────────────────────────
+    // ── Picture ──────────────────────────────────────────────────────────────
     if (el.tagName === 'pic') {
       const blip = el.querySelector('blip');
       const xfrm = el.querySelector('spPr xfrm') ?? el.querySelector('xfrm');
       if (!xfrm) continue;
       const off = kid(xfrm, 'off'), ext = kid(xfrm, 'ext');
       if (!off || !ext) continue;
-      const x = emu(off.getAttribute('x'), sx);
-      const y = emu(off.getAttribute('y'), sy);
-      const w = emu(ext.getAttribute('cx'), sx);
-      const h = emu(ext.getAttribute('cy'), sy);
+      const x = emu(off.getAttribute('x'), sx),  y = emu(off.getAttribute('y'), sy);
+      const w = emu(ext.getAttribute('cx'), sx),  h = emu(ext.getAttribute('cy'), sy);
       if (w <= 0 || h <= 0) continue;
-
       const rId = blip?.getAttribute('embed');
       if (!rId || !mediaMap.has(rId)) continue;
-
       const flipH = xfrm.getAttribute('flipH') === '1';
       const flipV = xfrm.getAttribute('flipV') === '1';
       if (flipH || flipV) {
@@ -284,33 +400,40 @@ async function renderPptxSlide(
       continue;
     }
 
-    // ── Shape (may contain text) ───────────────────────────────────────────────
+    // ── Shape ─────────────────────────────────────────────────────────────────
     if (el.tagName !== 'sp') continue;
 
     const spPr   = kid(el, 'spPr');
     const txBody = kid(el, 'txBody');
-
-    const xfrm = spPr ? kid(spPr, 'xfrm') : null;
+    const xfrm   = spPr ? kid(spPr, 'xfrm') : null;
     if (!xfrm) continue;
     const off = kid(xfrm, 'off'), ext = kid(xfrm, 'ext');
     if (!off || !ext) continue;
-    const x = emu(off.getAttribute('x'), sx);
-    const y = emu(off.getAttribute('y'), sy);
-    const w = emu(ext.getAttribute('cx'), sx);
-    const h = emu(ext.getAttribute('cy'), sy);
+    const x = emu(off.getAttribute('x'), sx),  y = emu(off.getAttribute('y'), sy);
+    const w = emu(ext.getAttribute('cx'), sx),  h = emu(ext.getAttribute('cy'), sy);
     if (w <= 0 || h <= 0) continue;
 
-    // Shape solid fill (behind text)
+    // Placeholder type → font-size defaults
+    const phType  = el.querySelector('nvSpPr nvPr ph')?.getAttribute('type');
+    const defPxSz = phType === 'title' || phType === 'ctrTitle' ? 48
+      : phType === 'subTitle' ? 32
+      : phType === 'body'     ? 24
+      : phType === 'dt' || phType === 'ftr' || phType === 'sldNum' ? 12
+      : 20;
+    const defBold = phType === 'title' || phType === 'ctrTitle';
+
+    // Shape fill
     if (spPr) {
-      const sc = spPr.querySelector(':scope > solidFill srgbClr') ??
-                 spPr.querySelector('solidFill srgbClr');
-      if (sc) {
-        ctx.globalAlpha = 0.88;
-        ctx.fillStyle   = '#' + (sc.getAttribute('val') ?? 'F0F4FF');
-        ctx.fillRect(x, y, w, h);
-        ctx.globalAlpha = 1;
+      const solid = kid(spPr, 'solidFill');
+      if (solid) {
+        const c = resolveClr(solid, tc);
+        if (c) {
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle   = c;
+          ctx.fillRect(x, y, w, h);
+          ctx.globalAlpha = 1;
+        }
       }
-      // Shape blipFill (image-filled rectangle)
       const shapeBlip = spPr.querySelector('blipFill blip');
       if (shapeBlip) {
         const rId = shapeBlip.getAttribute('embed');
@@ -320,7 +443,6 @@ async function renderPptxSlide(
 
     if (!txBody) continue;
 
-    // Body properties
     const bodyPr = kid(txBody, 'bodyPr');
     const anchor = bodyPr?.getAttribute('anchor') ?? 'ctr';
     const lIns   = emu(bodyPr?.getAttribute('lIns') ?? '91440', sx);
@@ -331,57 +453,59 @@ async function renderPptxSlide(
     const textW  = Math.max(1, w - lIns - rIns);
     const textH  = Math.max(1, h - tIns - bIns);
 
-    // Parse paragraphs → lines
     interface LineInfo {
-      text: string;
-      pxSz: number;
-      bold: boolean;
-      italic: boolean;
-      color: string | null;
-      align: string;
-      lineH: number;
+      text: string; pxSz: number; bold: boolean; italic: boolean;
+      color: string | null; align: string; lineH: number; fontName: string;
     }
     const lines: LineInfo[] = [];
 
     for (const para of txBody.querySelectorAll('p')) {
-      const pPr   = kid(para, 'pPr');
-      const algn  = pPr?.getAttribute('algn') ?? 'l';
-      const runs  = [...para.querySelectorAll('r')];
+      const pPr    = kid(para, 'pPr');
+      const defRPr = pPr ? kid(pPr, 'defRPr') : null;
+      const algn   = pPr?.getAttribute('algn') ?? 'l';
+      const runs   = [...para.querySelectorAll('r')];
+
       if (runs.length === 0) {
-        lines.push({ text: '', pxSz: 14, bold: false, italic: false, color: null, align: algn, lineH: 16 });
+        lines.push({ text:'', pxSz:defPxSz, bold:defBold, italic:false, color:null, align:algn, lineH:defPxSz*1.3, fontName:'Arial' });
         continue;
       }
 
-      let text   = '';
-      let pxSz   = 14;
-      let bold   = false;
-      let italic = false;
-      let color: string | null = null;
+      // Paragraph-level defaults
+      const pDefSzStr = defRPr?.getAttribute('sz');
+      const pDefSz    = pDefSzStr ? Math.max(8, Math.min(Math.round(parseInt(pDefSzStr)/100 * 1.333), 96)) : defPxSz;
+      const pDefBold  = defRPr?.getAttribute('b') === '1' || defBold;
+
+      let   text    = '';
+      let   pxSz    = pDefSz;
+      let   bold    = pDefBold;
+      let   italic  = false;
+      let   color: string | null = null;
+      let   fontName = 'Arial';
 
       for (const run of runs) {
         const rPr = kid(run, 'rPr');
         text += kid(run, 't')?.textContent ?? '';
 
+        // Font size
         const sz = rPr?.getAttribute('sz');
-        if (sz) {
-          const pt = parseInt(sz, 10) / 100;
-          pxSz = Math.max(8, Math.min(Math.round(pt * 1.333), 96));
-        }
-        if (rPr?.getAttribute('b') === '1') bold   = true;
-        if (rPr?.getAttribute('i') === '1') italic = true;
+        if (sz) pxSz = Math.max(8, Math.min(Math.round(parseInt(sz) / 100 * 1.333), 96));
 
-        const clrEl = rPr?.querySelector('solidFill srgbClr');
-        if (clrEl) {
-          color = '#' + clrEl.getAttribute('val');
-        } else if (!color) {
-          const scheme = rPr?.querySelector('solidFill schemeClr')?.getAttribute('val') ?? '';
-          if (scheme === 'lt1' || scheme === 'bg1') color = '#FFFFFF';
-          else if (scheme === 'dk1' || scheme === 'tx1') color = '#111827';
-          else if (scheme.startsWith('accent'))          color = '#4F46E5';
+        // Style
+        if (rPr?.getAttribute('b')  === '1') bold   = true;
+        if (rPr?.getAttribute('i')  === '1') italic = true;
+
+        // Font face (for best-effort match)
+        const latin = rPr ? kid(rPr, 'latin') : null;
+        if (latin) fontName = latin.getAttribute('typeface') ?? 'Arial';
+
+        // Color (explicit wins)
+        if (!color) {
+          const solid = rPr ? kid(rPr, 'solidFill') : null;
+          if (solid) color = resolveClr(solid, tc);
         }
       }
 
-      lines.push({ text, pxSz, bold, italic, color, align: algn, lineH: pxSz * 1.3 });
+      lines.push({ text, pxSz, bold, italic, color, align: algn, lineH: pxSz * 1.3, fontName });
     }
 
     if (lines.every(l => !l.text.trim())) continue;
@@ -393,7 +517,7 @@ async function renderPptxSlide(
       : anchor === 'b' ? y + h - bIns - estH
       : y + tIns + Math.max(0, (textH - estH) / 2);
 
-    // Clip & render
+    // Clip
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, w, h);
@@ -401,48 +525,45 @@ async function renderPptxSlide(
 
     for (const line of lines) {
       if (!line.text.trim()) { curY += line.lineH * 0.35; continue; }
-      if (curY > y + h) break;
+      if (curY > y + h)      break;
 
-      ctx.font = `${line.italic ? 'italic ' : ''}${line.bold ? 'bold ' : ''}${line.pxSz}px Arial, sans-serif`;
+      // ── Color: explicit → theme → auto-contrast from background ─────────────
+      let fillColor = line.color;
+      if (!fillColor) {
+        const brightness = sampleBrightness(ctx, x, y, Math.max(1, w), Math.min(Math.max(1, h), 40));
+        fillColor = brightness > 0.55
+          ? (tc.dk1 ?? '#1E293B')   // light background → dark text
+          : (tc.lt1 ?? '#FFFFFF');  // dark background  → light text
+      }
+
+      // ── Font: try named font first, then fallback to Almoni-friendly stack ──
+      const safeFontName = (line.fontName || 'Arial').replace(/'/g, "\\'");
+      ctx.font = `${line.italic ? 'italic ' : ''}${line.bold ? 'bold ' : ''}${line.pxSz}px '${safeFontName}', 'Almoni CLM', 'Almoni Tzar CLM', 'Arial Hebrew', Heebo, Arial, sans-serif`;
       ctx.textBaseline = 'top';
+      ctx.fillStyle    = fillColor;
 
-      const fillColor = line.color ?? '#1E293B';
-      ctx.fillStyle   = fillColor;
-
-      // Subtle shadow for readability on any background
-      const isWhite = fillColor.replace('#', '').toLowerCase() === 'ffffff';
-      ctx.shadowColor   = isWhite ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.3)';
+      // Shadow for readability on any background
+      const isLight = parseInt(fillColor.replace('#','').slice(0,2), 16) > 128;
+      ctx.shadowColor   = isLight ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.35)';
       ctx.shadowBlur    = 2;
-      ctx.shadowOffsetX = 0.4;
-      ctx.shadowOffsetY = 0.4;
+      ctx.shadowOffsetX = ctx.shadowOffsetY = 0.5;
 
       // Alignment
       let drawX: number;
-      if (line.align === 'ctr' || line.align === 'center') {
-        ctx.textAlign = 'center';
-        drawX = x + w / 2;
-      } else if (line.align === 'r' || line.align === 'right') {
-        ctx.textAlign = 'right';
-        drawX = x + w - rIns;
-      } else {
-        ctx.textAlign = 'left';
-        drawX = textX;
-      }
+      if      (line.align === 'ctr' || line.align === 'center') { ctx.textAlign = 'center'; drawX = x + w / 2; }
+      else if (line.align === 'r'   || line.align === 'right')  { ctx.textAlign = 'right';  drawX = x + w - rIns; }
+      else                                                        { ctx.textAlign = 'left';   drawX = textX; }
 
       // Word wrap
-      const words   = line.text.split(' ');
-      let current   = '';
+      const words: string[] = line.text.split(' ');
       const chunks: string[] = [];
+      let   cur = '';
       for (const word of words) {
-        const test = current ? current + ' ' + word : word;
-        if (ctx.measureText(test).width > textW + 4 && current) {
-          chunks.push(current);
-          current = word;
-        } else {
-          current = test;
-        }
+        const test = cur ? cur + ' ' + word : word;
+        if (ctx.measureText(test).width > textW + 4 && cur) { chunks.push(cur); cur = word; }
+        else cur = test;
       }
-      if (current) chunks.push(current);
+      if (cur) chunks.push(cur);
 
       for (const chunk of chunks) {
         if (curY + line.lineH > y + h + 2) break;
@@ -456,10 +577,10 @@ async function renderPptxSlide(
     ctx.restore();
   }
 
-  return canvasToDataUrl(canvas, 0.92);
+  return canvasToDataUrl(canvas, 0.93);
 }
 
-/** Main PPTX entry — processes all slides */
+/** Main PPTX entry — processes all slides in order */
 async function extractPptxThumbnails(file: File): Promise<string[]> {
   const zip = await JSZip.loadAsync(file);
 
@@ -495,17 +616,14 @@ async function extractPptxThumbnails(file: File): Promise<string[]> {
 // ── DOCX thumbnails ─────────────────────────────────────────────────────────────
 
 async function extractDocxThumbnails(file: File): Promise<string[]> {
-  const zip        = await JSZip.loadAsync(file);
-  const mediaFiles = Object.keys(zip.files).filter(
+  const zip   = await JSZip.loadAsync(file);
+  const media = Object.keys(zip.files).filter(
     n => n.startsWith('word/media/') && /\.(png|jpg|jpeg|gif)$/i.test(n),
   );
-  if (mediaFiles.length > 0) {
+  if (media.length > 0) {
     const results: string[] = [];
-    for (const mf of mediaFiles.slice(0, 10)) {
-      try {
-        const blob = await zip.file(mf)!.async('blob');
-        results.push(await blobToDataUrl(blob));
-      } catch { /* ignore */ }
+    for (const mf of media.slice(0, 10)) {
+      try { results.push(await blobToDataUrl(await zip.file(mf)!.async('blob'))); } catch { /* ignore */ }
     }
     if (results.length > 0) return results;
   }
@@ -521,9 +639,9 @@ function makePlaceholderDataUrl(label: string): string {
   const ctx     = canvas.getContext('2d')!;
   ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(0, 0, 480, 270);
-  ctx.fillStyle = '#94a3b8';
-  ctx.font      = 'bold 16px sans-serif';
-  ctx.textAlign = 'center';
+  ctx.fillStyle    = '#94a3b8';
+  ctx.font         = 'bold 16px Arial, sans-serif';
+  ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(label.slice(0, 40), 240, 135);
   return canvas.toDataURL('image/png');
@@ -561,57 +679,37 @@ export function useContentProcessor() {
     }
   }, []);
 
-  /**
-   * מעבד URL סרטון — תומך YouTube (watch / shorts / youtu.be) ו-Vimeo.
-   * מחזיר { embedUrl, thumbnailUrl, title }
-   */
   const processVideoUrl = useCallback(async (
     url: string,
   ): Promise<{ embedUrl: string; thumbnailUrl: string; title: string }> => {
     try {
       // YouTube
-      const ytMatch = url.match(
-        /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/,
-      );
-      if (ytMatch) {
-        const videoId      = ytMatch[1];
+      const ytM = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/);
+      if (ytM) {
+        const videoId      = ytM[1];
         const embedUrl     = `https://www.youtube.com/embed/${videoId}`;
         const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
         try {
-          const oRes  = await fetch(
+          const d = await (await fetch(
             `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
-          );
-          const oData = await oRes.json();
-          return { embedUrl, thumbnailUrl, title: oData.title ?? 'סרטון YouTube' };
-        } catch {
-          return { embedUrl, thumbnailUrl, title: 'סרטון YouTube' };
-        }
+          )).json();
+          return { embedUrl, thumbnailUrl, title: d.title ?? 'סרטון YouTube' };
+        } catch { return { embedUrl, thumbnailUrl, title: 'סרטון YouTube' }; }
       }
-
       // Vimeo
-      const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-      if (vimeoMatch) {
-        const videoId  = vimeoMatch[1];
+      const vmM = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+      if (vmM) {
+        const videoId  = vmM[1];
         const embedUrl = `https://player.vimeo.com/video/${videoId}`;
         try {
-          const oRes  = await fetch(
+          const d = await (await fetch(
             `https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`,
-          );
-          const oData = await oRes.json();
-          return {
-            embedUrl,
-            thumbnailUrl: oData.thumbnail_url ?? '',
-            title:        oData.title         ?? 'סרטון Vimeo',
-          };
-        } catch {
-          return { embedUrl, thumbnailUrl: '', title: 'סרטון Vimeo' };
-        }
+          )).json();
+          return { embedUrl, thumbnailUrl: d.thumbnail_url ?? '', title: d.title ?? 'סרטון Vimeo' };
+        } catch { return { embedUrl, thumbnailUrl: '', title: 'סרטון Vimeo' }; }
       }
-
       return { embedUrl: url, thumbnailUrl: '', title: 'סרטון' };
-    } catch {
-      return { embedUrl: url, thumbnailUrl: '', title: 'סרטון' };
-    }
+    } catch { return { embedUrl: url, thumbnailUrl: '', title: 'סרטון' }; }
   }, []);
 
   return { processFile, processVideoUrl };
