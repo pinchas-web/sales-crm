@@ -1,21 +1,19 @@
 /**
  * FileUploadZone — אזור גרירה להעלאת קבצים לשיעור.
- * תומך ב: PDF, PPTX, DOCX, תמונות.
- * פותר בעיות MIME-type של Windows ע"י recovery לפי סיומת קובץ.
+ * סינון לפי סיומת בלבד — ללא תלות ב-MIME type של Windows.
  */
 import { useCallback, useState } from 'react';
-import { useDropzone, type FileRejection } from 'react-dropzone';
+import { useDropzone } from 'react-dropzone';
 import type { ContentType } from '../../types';
 import { detectContentType } from './useContentProcessor';
 
-// כל הסיומות שאנו מקבלים
 const ALLOWED_EXTS = new Set([
-  '.pdf', '.ppt', '.pptx', '.doc', '.docx',
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+  'pdf', 'ppt', 'pptx', 'doc', 'docx',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
 ]);
 
 function extOf(name: string): string {
-  return '.' + (name.split('.').pop()?.toLowerCase() ?? '');
+  return name.split('.').pop()?.toLowerCase() ?? '';
 }
 
 interface FileUploadZoneProps {
@@ -29,42 +27,27 @@ export default function FileUploadZone({
 }: FileUploadZoneProps) {
   const [showVideoInput, setShowVideoInput] = useState(false);
   const [videoUrl, setVideoUrl]             = useState('');
+  const [rejectedMsg, setRejectedMsg]       = useState('');
 
-  /**
-   * React-dropzone הופך קבצים ל"נדחים" אם סוג ה-MIME לא מוכר (נפוץ ב-Windows).
-   * הפתרון: גם קבצים "נדחים" שיש להם סיומת חוקית — מתקבלים.
-   */
-  const onDrop = useCallback(
-    (accepted: File[], rejected: FileRejection[]) => {
-      // קבצים שנדחו בגלל MIME אבל הסיומת בסדר — נחזיר אותם
-      const recovered = rejected
-        .filter(r => ALLOWED_EXTS.has(extOf(r.file.name)))
-        .map(r => r.file);
+  // מקבל את כל הקבצים ללא סינון MIME, מסנן רק לפי סיומת
+  const onDrop = useCallback((allFiles: File[]) => {
+    setRejectedMsg('');
+    const valid   = allFiles.filter(f => ALLOWED_EXTS.has(extOf(f.name)));
+    const invalid = allFiles.filter(f => !ALLOWED_EXTS.has(extOf(f.name)));
 
-      const all = [...accepted, ...recovered];
-      if (all.length > 0) {
-        onFilesAccepted(all.map(f => ({ file: f, type: detectContentType(f.name) })));
-      }
-    },
-    [onFilesAccepted],
-  );
+    if (invalid.length > 0) {
+      setRejectedMsg(`לא נתמך: ${invalid.map(f => f.name).join(', ')}`);
+      setTimeout(() => setRejectedMsg(''), 4000);
+    }
+    if (valid.length > 0) {
+      onFilesAccepted(valid.map(f => ({ file: f, type: detectContentType(f.name) })));
+    }
+  }, [onFilesAccepted]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    // accept: נשמר רק לצורך סינון תיבת הדו-שיח של מערכת ההפעלה
-    accept: {
-      'application/pdf':         ['.pdf'],
-      'application/vnd.ms-powerpoint': ['.ppt'],
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-      'application/msword':      ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':   ['.docx'],
-      'image/*':                 ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
-      // Windows MIME fallbacks
-      'application/zip':              ['.pptx', '.docx'],
-      'application/x-zip-compressed': ['.pptx', '.docx'],
-      'application/octet-stream':     ['.pdf', '.ppt', '.pptx', '.doc', '.docx'],
-      'application/vnd.ms-office':    ['.pptx', '.docx', '.ppt', '.doc'],
-    },
+    // אין accept — מקבל הכל ומסנן בעצמנו
+    noClick: false,
     multiple: true,
     disabled: processing,
   });
@@ -90,20 +73,26 @@ export default function FileUploadZone({
         `}
       >
         <input {...getInputProps()} />
-        <div className="text-3xl mb-2">{processing ? '⏳' : isDragActive ? '📂' : '📎'}</div>
+        <div className="text-3xl mb-2">
+          {processing ? '⏳' : isDragActive ? '📂' : '📎'}
+        </div>
         {processing ? (
           <p className="text-sm text-indigo-600 font-medium">מעבד קבצים...</p>
         ) : isDragActive ? (
           <p className="text-sm text-indigo-600 font-medium">שחרר כאן</p>
         ) : (
           <>
-            <p className="text-sm text-gray-600 font-medium">גרור קבצים לכאן</p>
+            <p className="text-sm text-gray-600 font-medium">גרור קבצים לכאן, או לחץ לבחירה</p>
             <p className="text-xs text-gray-400 mt-1">PDF · PPTX · DOCX · תמונות</p>
           </>
         )}
       </div>
 
-      {/* כפתורי פעולה */}
+      {rejectedMsg && (
+        <p className="text-xs text-red-500 px-1">{rejectedMsg}</p>
+      )}
+
+      {/* כפתור וידאו */}
       <div className="flex gap-2">
         <button
           onClick={() => setShowVideoInput(v => !v)}
@@ -114,7 +103,6 @@ export default function FileUploadZone({
         </button>
       </div>
 
-      {/* שדה קישור וידאו */}
       {showVideoInput && (
         <div className="flex gap-2 items-center bg-white border border-gray-200 rounded-xl p-3">
           <input
