@@ -26,15 +26,30 @@ export default function FileUploadZone({ onFilesAccepted, onVideoUrl, processing
     onFilesAccepted(mapped);
   }, [onFilesAccepted]);
 
+  const ALLOWED_EXTS = new Set(['.pdf','.ppt','.pptx','.doc','.docx','.png','.jpg','.jpeg','.gif','.webp']);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    // Accept both explicit MIME types AND fallback for Windows (octet-stream / zip)
     accept: {
-      'application/pdf':                                                 ['.pdf'],
-      'application/vnd.ms-powerpoint':                                  ['.ppt'],
+      'application/pdf':       ['.pdf'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
       'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-      'application/msword':                                             ['.doc'],
+      'application/msword':    ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document':   ['.docx'],
-      'image/*':                                                        ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
+      'image/*':               ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
+      // Windows fallbacks — MIME type may be generic
+      'application/zip':             ['.pptx', '.docx'],
+      'application/x-zip-compressed':['.pptx', '.docx'],
+      'application/octet-stream':    ['.pdf', '.ppt', '.pptx', '.doc', '.docx'],
+    },
+    // Extension-based validator as safety net (covers edge cases)
+    validator: (file) => {
+      const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
+      return ALLOWED_EXTS.has(ext) ? null : {
+        code: 'file-invalid-type',
+        message: `סוג קובץ לא נתמך: ${ext}`,
+      };
     },
     multiple: true,
     disabled: processing,
