@@ -10,7 +10,7 @@ import { useState, useCallback, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { uid } from '../../utils';
 import type { ContentItem, ContentType, Lesson } from '../../types';
-import { apiUploadCourseFile } from '../../api';
+import { apiUploadCourseFile, apiUploadThumbnailDataUrl } from '../../api';
 import ContentCard from './ContentCard';
 import FileUploadZone from './FileUploadZone';
 import { useContentProcessor } from './useContentProcessor';
@@ -124,7 +124,17 @@ export default function LessonBoard({
         const { fileKey, fileUrl } = await apiUploadCourseFile(file, `lessons/${lesson.id}`);
 
         setProcessingMsg(`מייצר תצוגה מקדימה ל${file.name}...`);
-        const thumbnails = await processFile(file, type);
+        const rawThumbs = await processFile(file, type);
+
+        // Upload thumbnails to Supabase Storage → URLs instead of large base64
+        // (base64 is stripped from POST body, so without this thumbnails won't persist)
+        setProcessingMsg(`שומר תמונות מקדימה (${rawThumbs.length})...`);
+        const thumbnails = await Promise.all(
+          rawThumbs.map(dataUrl =>
+            apiUploadThumbnailDataUrl(dataUrl, `thumbnails/${lesson.id}`)
+              .catch(() => dataUrl), // keep data URL in memory if upload fails
+          ),
+        );
 
         onAddItem({
           id:       uid(),

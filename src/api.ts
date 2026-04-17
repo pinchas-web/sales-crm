@@ -51,13 +51,28 @@ export async function apiLoadState(): Promise<unknown | null> {
 /**
  * שומר את ה-AppState לשרת.
  * הServerless function מאמת בעלות — נציג לא יכול לשמור נתונים של אחרים.
+ *
+ * NOTE: base64 data URLs נגרעים מ-thumbnails לפני השליחה —
+ * הם יכולים להיות עשרות MB ולחרוג מה-4.5MB limit של Vercel.
+ * thumbnails נשמרים ב-Supabase Storage ומוחלפים ב-URLs קצרים ב-handleFilesAccepted.
  */
 export async function apiSaveState(state: unknown): Promise<void> {
   console.log('[CRM] apiSaveState called — sending POST /api/state');
+
+  // Strip base64 data URLs from thumbnails — keep only http/https Storage URLs
+  type CI = Record<string, unknown> & { thumbnails?: string[] };
+  const s = state as Record<string, unknown>;
+  const contentItems = ((s.contentItems ?? []) as CI[]).map(ci => ({
+    ...ci,
+    thumbnails: (ci.thumbnails ?? []).filter(
+      (t): t is string => typeof t === 'string' && !t.startsWith('data:'),
+    ),
+  }));
+
   const res = await fetch('/api/state', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify(state),
+    body: JSON.stringify({ ...s, contentItems }),
   });
 
   if (!res.ok) {
@@ -141,6 +156,23 @@ export async function apiUploadCourseFile(
     .getPublicUrl(fileKey);
 
   return { fileKey, fileUrl: data.publicUrl };
+}
+
+/**
+ * מעלה data URL (base64) כקובץ תמונה ל-Supabase Storage.
+ * מחזיר URL ציבורי — קצר בהרבה מ-base64.
+ * משמש להמרת thumbnails מ-base64 ל-Storage URLs לפני השמירה בבסיס הנתונים.
+ */
+export async function apiUploadThumbnailDataUrl(
+  dataUrl: string,
+  folder: string,
+): Promise<string> {
+  const res  = await fetch(dataUrl);
+  const blob = await res.blob();
+  const ext  = blob.type === 'image/png' ? 'png' : 'jpg';
+  const file = new File([blob], `thumb.${ext}`, { type: blob.type });
+  const { fileUrl } = await apiUploadCourseFile(file, folder);
+  return fileUrl;
 }
 
 /**
