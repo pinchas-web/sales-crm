@@ -15,7 +15,9 @@ export interface CrmUser {
  * מחזיר null אם ה-token לא תקין או המשתמש לא קיים ב-crm_users.
  */
 export async function validateRequest(authHeader: string | undefined): Promise<CrmUser | null> {
-  const token = authHeader?.replace('Bearer ', '').trim();
+  // FIX: לא לשרשר .trim() אחרי ?. — אם authHeader=undefined, ?. מחזיר undefined
+  // ו-.trim() על undefined זורק TypeError. במקום זה, נשתמש ב-?? '' כברירת מחדל.
+  const token = (authHeader ?? '').replace('Bearer ', '').trim();
   if (!token) {
     console.error('[CRM auth] FAILED: no Bearer token in Authorization header');
     return null;

@@ -10,18 +10,26 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateRequest } from './_lib/auth';
 import { supabaseAdmin }   from './_lib/supabaseAdmin';
 
+console.log('[CRM state.ts] module loaded — handler registered');
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const crmUser = await validateRequest(req.headers.authorization);
-  if (!crmUser) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  console.log('[CRM handler] request received:', req.method, req.url);
+  try {
+    const crmUser = await validateRequest(req.headers.authorization);
+    if (!crmUser) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const isAdmin = crmUser.role === 'admin';
+    const uid     = crmUser.crm_user_id;
+
+    if (req.method === 'GET')  return handleGet(res, uid, isAdmin);
+    if (req.method === 'POST') return handlePost(req, res, uid, isAdmin);
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    console.error('[CRM] UNHANDLED EXCEPTION in handler:', err);
+    return res.status(500).json({ error: 'Internal server error', details: String(err) });
   }
-
-  const isAdmin = crmUser.role === 'admin';
-  const uid     = crmUser.crm_user_id;
-
-  if (req.method === 'GET')  return handleGet(res, uid, isAdmin);
-  if (req.method === 'POST') return handlePost(req, res, uid, isAdmin);
-  return res.status(405).json({ error: 'Method not allowed' });
 }
 
 // ════════════════════════════════════════════════════════════════════
