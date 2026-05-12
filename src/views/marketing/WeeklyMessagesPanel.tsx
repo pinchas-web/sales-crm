@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import type { AppState, MarketingMessage, MarketingCtaType, MarketingPlatform } from '../../types';
 import { uid } from '../../utils';
 import { supabase } from '../../api';
@@ -55,7 +55,85 @@ function parseEmailContent(content: string): { subject: string; body: string } {
 }
 
 function parseReels(content: string): string[] {
-  return content.split(/\n?---+\n?/).map(s => s.trim()).filter(Boolean);
+  // Do NOT .trim() — that strips trailing spaces while the user is typing
+  return content
+    .split(/\n?---+\n?/)
+    .map(s => s.replace(/^\n+/, '').replace(/\n+$/, ''))
+    .filter(Boolean);
+}
+
+// ─── StatusReelEditor — separate component so useRef/useLayoutEffect work ────
+
+interface StatusReelEditorProps {
+  content: string;
+  onChange: (content: string) => void;
+}
+
+function StatusReelEditor({ content, onChange }: StatusReelEditorProps) {
+  const reels = parseReels(content);
+  const textareaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+  const focusTarget  = useRef<{ index: number; cursor: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const t = focusTarget.current;
+    if (t !== null) {
+      const el = textareaRefs.current[t.index];
+      if (el) { el.focus(); el.setSelectionRange(t.cursor, t.cursor); }
+      focusTarget.current = null;
+    }
+  });
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, ri: number) {
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      const ta     = e.currentTarget;
+      const cursor = ta.selectionStart;
+      const before = reels[ri].slice(0, cursor);
+      const after  = reels[ri].slice(cursor);
+      const updated = [...reels];
+      updated[ri] = before;
+      updated.splice(ri + 1, 0, after);
+      focusTarget.current = { index: ri + 1, cursor: 0 };
+      onChange(updated.join('\n---\n'));
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {reels.map((reel, ri) => {
+        const over = reel.length > 145;
+        return (
+          <div
+            key={ri}
+            className={`rounded-lg border p-3 ${over ? 'border-red-300 bg-red-50/20' : 'border-gray-100 bg-gray-50'}`}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-gray-500">רילס {ri + 1}</span>
+              <span className={`text-xs font-mono ${over ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
+                {reel.length}/145
+              </span>
+            </div>
+            <textarea
+              ref={el => { textareaRefs.current[ri] = el; }}
+              value={reel}
+              onChange={e => {
+                const updated = [...reels];
+                updated[ri] = e.target.value;
+                onChange(updated.join('\n---\n'));
+              }}
+              onKeyDown={e => handleKeyDown(e, ri)}
+              rows={3}
+              className="w-full border-0 bg-transparent text-sm focus:outline-none resize-none leading-relaxed"
+            />
+          </div>
+        );
+      })}
+      <p className="text-xs text-gray-400 mt-1">
+        <kbd className="bg-gray-100 px-1 rounded text-xs">Enter</kbd> שורה חדשה &nbsp;·&nbsp;
+        <kbd className="bg-gray-100 px-1 rounded text-xs">Shift+Enter</kbd> רילס חדש
+      </p>
+    </div>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -85,6 +163,9 @@ export default function WeeklyMessagesPanel({ state, onUpdate }: Props) {
   const byPlatform = useMemo(() => {
     const map: Partial<Record<MarketingPlatform, MarketingMessage[]>> = {};
     for (const m of weekMessages) (map[m.platform] ??= []).push(m);
+    for (const msgs of Object.values(map)) {
+      msgs?.sort((a, b) => (a.sequenceOrder ?? 1) - (b.sequenceOrder ?? 1));
+    }
     return map;
   }, [weekMessages]);
 
@@ -242,38 +323,16 @@ export default function WeeklyMessagesPanel({ state, onUpdate }: Props) {
       );
     }
 
-    // ── WhatsApp status → individual reels ──
+    // ── WhatsApp status → reel editor ──
     if (msg.platform === 'whatsapp_status') {
-      const reels = parseReels(msg.content);
       return (
         <div key={msg.id} className={cardCls}>
           {actionBar}
-          <p className="text-xs text-gray-400 mb-3">{reels.length} רילסים סטטוס</p>
-          <div className="space-y-2">
-            {reels.map((reel, ri) => {
-              const over = reel.length > 145;
-              return (
-                <div key={ri} className={`rounded-lg border p-3 ${over ? 'border-red-300 bg-red-50/20' : 'border-gray-100 bg-gray-50'}`}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-semibold text-gray-500">רילס {ri + 1}</span>
-                    <span className={`text-xs font-mono ${over ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
-                      {reel.length}/145
-                    </span>
-                  </div>
-                  <textarea
-                    value={reel}
-                    onChange={e => {
-                      const updated = [...reels];
-                      updated[ri] = e.target.value;
-                      updateContent(msg.id, updated.join('\n---\n'));
-                    }}
-                    rows={3}
-                    className="w-full border-0 bg-transparent text-sm focus:outline-none resize-none leading-relaxed"
-                  />
-                </div>
-              );
-            })}
-          </div>
+          <p className="text-xs text-gray-400 mb-3">{parseReels(msg.content).length} רילסים סטטוס</p>
+          <StatusReelEditor
+            content={msg.content}
+            onChange={c => updateContent(msg.id, c)}
+          />
         </div>
       );
     }

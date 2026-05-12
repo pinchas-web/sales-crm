@@ -285,6 +285,7 @@ function dbToMarketingMessage(r: Row): Row {
     content:       r.content,
     ctaType:       r.cta_type,
     status:        r.status,
+    sequenceOrder: r.sequence_order ?? 1,
     sourceContent: r.source_content,
     createdAt:     r.created_at,
     updatedAt:     r.updated_at,
@@ -299,6 +300,7 @@ function marketingMessageToDb(m: Row): Row {
     content:        m.content       ?? '',
     cta_type:       m.ctaType       ?? 'nurture',
     status:         m.status        ?? 'draft',
+    sequence_order: m.sequenceOrder ?? 1,
     source_content: m.sourceContent ?? null,
     created_at:     m.createdAt,
     updated_at:     m.updatedAt     ?? new Date().toISOString(),
@@ -386,7 +388,9 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
 
   // מסרים שיווקיים
   const { data: rawMktMessages = [] } = await supabaseAdmin
-    .from('marketing_messages').select('*').order('week_date', { ascending: false });
+    .from('marketing_messages').select('*')
+    .order('week_date', { ascending: false })
+    .order('sequence_order', { ascending: true });
   const marketingMessages = (rawMktMessages ?? []).map(dbToMarketingMessage);
 
   if (!config) {

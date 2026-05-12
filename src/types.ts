@@ -245,6 +245,7 @@ export interface MarketingMessage {
   content: string;
   ctaType: MarketingCtaType;
   status: MarketingMsgStatus;
+  sequenceOrder: number;      // 1-based position in funnel sequence
   sourceContent?: string;
   createdAt: string;
   updatedAt: string;
