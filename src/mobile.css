@@ -1,0 +1,174 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE.CSS — Capacitor / native-app adjustments
+   נטען רק כשמזוהה פלטפורמת Capacitor (ראה main.tsx)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Safe-area tokens (iPhone notch / Dynamic Island / home indicator)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+:root {
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Global touch improvements
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+html {
+  /* Prevent iOS text inflation */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+
+  /* Smoother scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+
+  /* Prevent double-tap zoom */
+  touch-action: manipulation;
+}
+
+body {
+  /* Prevent rubber-band scroll on body itself */
+  overscroll-behavior: none;
+
+  /* Remove iOS tap highlight flash */
+  -webkit-tap-highlight-color: transparent;
+
+  /* Respect status bar at the top */
+  padding-top: var(--safe-top);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Header: push down below status bar
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.sticky.top-0 {
+  /* The sticky wrapper that holds header */
+  top: 0 !important;
+}
+
+header {
+  /* Extra padding at top for Dynamic Island / notch */
+  padding-top: calc(var(--safe-top) + 2px) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Main: bottom padding for home indicator
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+main {
+  padding-bottom: calc(var(--safe-bottom) + 16px) !important;
+  /* Smooth momentum scrolling */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Touch targets: minimum 44×44pt (Apple HIG)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+button,
+a,
+[role="button"] {
+  min-height: 44px !important;
+  min-width: 44px !important;
+  touch-action: manipulation;
+}
+
+/* Nav buttons can be slightly smaller since they're in a row */
+header nav button {
+  min-height: 38px !important;
+  min-width: 38px !important;
+  padding: 8px 10px !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Inputs: prevent iOS zoom on focus (font-size ≥ 16px)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Modals: full height on mobile, respect safe areas
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.fixed.inset-0 .bg-white.rounded-xl,
+.fixed.inset-0 .bg-white.rounded-2xl {
+  max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px) !important;
+  margin-top: calc(var(--safe-top) + 8px) !important;
+  margin-bottom: calc(var(--safe-bottom) + 8px) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Tables: horizontal scroll with momentum
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Kanban: swipe-friendly horizontal scroll
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.kanban-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding-bottom: calc(var(--safe-bottom) + 8px);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Cards: larger touch feedback area
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.card-drag-handle {
+  /* Larger active area without changing visual size */
+  padding: 4px;
+  margin: -4px;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   iOS status bar area — brand colored
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-top);
+  background: var(--grad-hero);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Faster tap response (no hover delay)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+@media (hover: none) {
+  /* On touch devices, remove hover-only transitions */
+  button:hover,
+  a:hover {
+    transition-duration: 0s !important;
+  }
+
+  /* Disable translateY hover lifts (they feel wrong on touch) */
+  .bg-white.rounded-xl.p-4:hover,
+  .bg-white.rounded-xl.p-5:hover,
+  .bg-white.rounded-xl.p-6:hover {
+    transform: none !important;
+  }
+
+  .card-drag-handle:hover {
+    transform: none !important;
+  }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Scrollbar: hidden on mobile (native handles it)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
