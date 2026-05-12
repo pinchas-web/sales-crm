@@ -190,7 +190,7 @@ export default function WeeklyMessagesPanel({ state, onUpdate }: Props) {
       const { messages } = await res.json();
       const now = new Date().toISOString();
       const newMessages: MarketingMessage[] = (messages as { platform: MarketingPlatform; content: string }[])
-        .map(m => ({ id: uid(), weekDate: selectedWeek, platform: m.platform, content: m.content, ctaType, status: 'draft', sourceContent: rawContent, createdAt: now, updatedAt: now }));
+        .map(m => ({ id: uid(), weekDate: selectedWeek, platform: m.platform, content: m.content, ctaType, status: 'draft' as const, sequenceOrder: 1, sourceContent: rawContent, createdAt: now, updatedAt: now }));
       onUpdate({ ...state, marketingMessages: [...kept, ...newMessages] });
       setShowGenerate(false);
     } catch (err) {
