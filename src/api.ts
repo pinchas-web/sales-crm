@@ -16,7 +16,15 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
 const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnon);
+// flowType: 'implicit' — מבטיח שקישורי שחזור סיסמא מכילים #type=recovery ב-URL
+// כך ResetPasswordScreen מזוהה מיד עם הטעינה (ללא תלות ב-async events)
+export const supabase = createClient(supabaseUrl, supabaseAnon, {
+  auth: {
+    flowType: 'implicit',
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
 
 // ── Headers עם Bearer JWT ────────────────────────────────────────────────────
 
@@ -42,10 +50,55 @@ export async function apiLoadState(): Promise<unknown | null> {
   });
 
   if (!res.ok) {
-    throw new Error(`CRM API: GET /api/state failed — ${res.status} ${res.statusText}`);
+    const err = new Error(`CRM API: GET /api/state failed - ${res.status} ${res.statusText}`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
 
   return res.json();
+}
+
+export async function apiForgotPassword(email: string): Promise<{ ok: true } | { error: string }> {
+  try {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        redirectTo: window.location.origin,
+      }),
+    });
+
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      return { error: 'password reset server is not running' };
+    }
+
+    const body = await res.json();
+    if (!res.ok) return { error: body?.error ?? 'Could not send reset email' };
+    return body;
+  } catch {
+    return { error: 'password reset server is not running' };
+  }
+}
+
+export async function apiRegister(params: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const { error } = await supabase.auth.signUp({
+    email: params.email,
+    password: params.password,
+    options: {
+      data: { name: params.name },
+      emailRedirectTo: window.location.origin,
+    },
+  });
+
+  if (error) return { error: error.message };
+  await supabase.auth.signOut();
+  return { ok: true };
 }
 
 /**
@@ -102,15 +155,44 @@ export async function apiGetCurrentUser(): Promise<{ crm_user_id: string; name: 
 }
 
 /**
- * יצירת משתמש חדש (מנהל בלבד) — יוצר ב-Supabase Auth ו-crm_users.
+ * יצירת משתמש חדש (מנהל בלבד).
+ * המנהל מגדיר ישירות את הסיסמא — אין צורך בקישור הגדרה נפרד.
  */
 export async function apiCreateUser(params: {
   email: string;
-  password: string;
   crm_user_id: string;
   role: 'admin' | 'salesperson';
+  password: string;
 }): Promise<{ auth_user_id: string } | { error: string }> {
   const res = await fetch('/api/users/create', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * שינוי סיסמא של משתמש ע"י מנהל — ללא צורך במייל.
+ */
+export async function apiChangeUserPassword(
+  crm_user_id: string,
+  new_password: string,
+): Promise<{ ok: true } | { error: string }> {
+  const res = await fetch('/api/users/change-password', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ crm_user_id, new_password }),
+  });
+  return res.json();
+}
+
+export async function apiUpdateUser(params: {
+  crm_user_id: string;
+  email?: string;
+  role?: 'admin' | 'salesperson';
+}): Promise<{ ok: true } | { error: string }> {
+  const res = await fetch('/api/users/update', {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify(params),
@@ -173,6 +255,22 @@ export async function apiUploadThumbnailDataUrl(
   const file = new File([blob], `thumb.${ext}`, { type: blob.type });
   const { fileUrl } = await apiUploadCourseFile(file, folder);
   return fileUrl;
+}
+
+/**
+ * מוריד קובץ קורס מ-Supabase Storage לפי fileKey.
+ * משמש לרענון previews של מצגות קיימות בלי להסתמך על URL ציבורי.
+ */
+export async function apiDownloadCourseFile(fileKey: string): Promise<Blob> {
+  const { data, error } = await supabase.storage
+    .from(COURSE_FILES_BUCKET)
+    .download(fileKey);
+
+  if (error || !data) {
+    throw new Error(`Download failed: ${error?.message ?? 'Unknown error'}`);
+  }
+
+  return data;
 }
 
 /**

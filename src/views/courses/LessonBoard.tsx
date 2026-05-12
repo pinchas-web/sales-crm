@@ -124,7 +124,7 @@ export default function LessonBoard({
         const { fileKey, fileUrl } = await apiUploadCourseFile(file, `lessons/${lesson.id}`);
 
         setProcessingMsg(`מייצר תצוגה מקדימה ל${file.name}...`);
-        const rawThumbs = await processFile(file, type);
+        const { thumbnails: rawThumbs, slideCount } = await processFile(file, type);
 
         // Upload thumbnails to Supabase Storage → URLs instead of large base64
         // (base64 is stripped from POST body, so without this thumbnails won't persist)
@@ -144,6 +144,7 @@ export default function LessonBoard({
           fileKey,
           fileUrl,
           thumbnails,
+          slideCount,
           order:    items.length,
         });
       } catch (err) {
@@ -225,7 +226,7 @@ export default function LessonBoard({
                           className={`flex flex-col gap-3 shrink-0 rounded-xl transition-shadow ${
                             colSnapshot.isDragging ? 'shadow-xl ring-2 ring-indigo-300 bg-white' : ''
                           }`}
-                          style={{ width: 220, ...colProvided.draggableProps.style }}
+                          style={{ width: type === 'pptx' ? 300 : 220, ...colProvided.draggableProps.style }}
                         >
                           {/* Column header — drag handle */}
                           <div
@@ -287,6 +288,7 @@ export default function LessonBoard({
                                           item={item}
                                           onDelete={() => onDeleteItem(item.id)}
                                           onRename={title => onUpdateItem(item.id, { title })}
+                                          onUpdateItem={updates => onUpdateItem(item.id, updates)}
                                         />
                                       </div>
                                     )}

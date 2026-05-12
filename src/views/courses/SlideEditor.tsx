@@ -1,128 +1,244 @@
-/**
- * SlideEditor — עורך שקופיות PPTX בסיסי.
- * מציג את השקופיות כתמונות ומאפשר:
- *  - גלילה בין שקופיות
- *  - הוספת/עריכת הערות טקסטואליות לכל שקופית
- *  - הורדת הקובץ המקורי לעריכה חיצונית
- */
 import { useState } from 'react';
 import type { ContentItem } from '../../types';
 
 interface SlideEditorProps {
   item: ContentItem;
+  initialIndex?: number;
   onClose: () => void;
   onDownload: () => void;
 }
 
-export default function SlideEditor({ item, onClose, onDownload }: SlideEditorProps) {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [notes, setNotes]               = useState<Record<number, string>>({});
+function canUseRenderedDeckPreview(thumbnailsCount: number, slideCount: number): boolean {
+  if (thumbnailsCount === 0) return false;
+  if (slideCount <= 1) return thumbnailsCount === 1;
+  return thumbnailsCount > 1;
+}
 
-  const total = item.thumbnails.length;
+function officeViewerUrl(fileUrl: string): string {
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+}
 
-  function prev() { setCurrentSlide(i => Math.max(0, i - 1)); }
-  function next() { setCurrentSlide(i => Math.min(total - 1, i + 1)); }
+function gdocsViewerUrl(fileUrl: string): string {
+  return `https://docs.google.com/gview?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+}
 
-  return (
-    <div className="flex flex-col h-full" dir="rtl">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-lg leading-none"
-          >
-            ✕
-          </button>
-          <h3 className="text-sm font-semibold truncate max-w-xs">{item.title}</h3>
-        </div>
+function pickDefaultViewer(item: ContentItem): 'office' | 'gdocs' {
+  const ext = (item.fileKey ?? item.title).split('.').pop()?.toLowerCase() ?? '';
+  if (['ppt', 'doc', 'xls'].includes(ext)) return 'gdocs';
+  return 'office';
+}
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">
-            {currentSlide + 1} / {total}
-          </span>
-          <button
-            onClick={onDownload}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 transition-colors"
-          >
-            <span>⬇️</span>
-            <span>הורד לעריכה</span>
-          </button>
-        </div>
-      </div>
+export default function SlideEditor({ item, initialIndex = 0, onClose, onDownload }: SlideEditorProps) {
+  const [viewer, setViewer] = useState<'office' | 'gdocs'>(() => pickDefaultViewer(item));
+  const [iframeKey, setIframeKey] = useState(0);
+  const [currentSlide, setCurrentSlide] = useState(initialIndex);
 
-      {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Thumbnail strip (right sidebar) */}
-        <div className="w-40 shrink-0 bg-gray-800 overflow-y-auto flex flex-col gap-2 p-2">
-          {item.thumbnails.map((thumb, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentSlide(idx)}
-              className={`relative rounded overflow-hidden border-2 transition-all ${
-                idx === currentSlide ? 'border-indigo-400 scale-105' : 'border-transparent hover:border-gray-500'
-              }`}
-            >
-              <img src={thumb} alt={`שקופית ${idx + 1}`} className="w-full object-cover" />
-              <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[10px] px-1 rounded">
-                {idx + 1}
-              </span>
-            </button>
-          ))}
-        </div>
+  const hasUrl = !!item.fileUrl;
+  const src = hasUrl
+    ? (viewer === 'office' ? officeViewerUrl(item.fileUrl!) : gdocsViewerUrl(item.fileUrl!))
+    : '';
+  const totalSlides = item.slideCount && item.slideCount > 0 ? item.slideCount : item.thumbnails.length;
 
-        {/* Main slide view */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-gray-700">
-          {/* Slide image */}
-          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-            {item.thumbnails[currentSlide] ? (
+  const hasRenderedSlides = (
+    item.type === 'pptx' &&
+    canUseRenderedDeckPreview(item.thumbnails.length, totalSlides)
+  );
+
+  if (hasRenderedSlides) {
+    return (
+      <div className="flex h-full bg-gray-950 text-white" dir="rtl">
+        <aside className="w-40 shrink-0 border-l border-gray-800 bg-gray-900/95 overflow-y-auto p-3">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-gray-300">שקופיות</span>
+            <span className="text-[11px] text-gray-500">{item.thumbnails.length}</span>
+          </div>
+
+          <div className="space-y-2">
+            {item.thumbnails.map((thumb, index) => (
+              <button
+                key={`${item.id}-slide-${index}`}
+                onClick={() => setCurrentSlide(index)}
+                className={`group relative w-full overflow-hidden rounded-lg border transition ${
+                  index === currentSlide
+                    ? 'border-indigo-400 ring-2 ring-indigo-500/50'
+                    : 'border-gray-800 hover:border-gray-600'
+                }`}
+              >
+                <img
+                  src={thumb}
+                  alt={`שקופית ${index + 1}`}
+                  className="w-full aspect-video object-cover bg-white"
+                />
+                <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
+                  {index + 1}
+                </span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-4 py-2.5 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-lg leading-none transition hover:bg-white/10 shrink-0"
+                title="סגור"
+                aria-label="סגור"
+              >
+                ×
+              </button>
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold">{item.title}</h3>
+                <p className="text-[11px] text-gray-400">
+                  שקופית {currentSlide + 1} מתוך {item.thumbnails.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setCurrentSlide(index => Math.max(0, index - 1))}
+                disabled={currentSlide === 0}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-35 hover:bg-white/10"
+              >
+                הקודם
+              </button>
+              <button
+                onClick={() => setCurrentSlide(index => Math.min(item.thumbnails.length - 1, index + 1))}
+                disabled={currentSlide === item.thumbnails.length - 1}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-35 hover:bg-white/10"
+              >
+                הבא
+              </button>
+              <button
+                onClick={onDownload}
+                disabled={!hasUrl}
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                הורד מקור
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-auto bg-[#1f2937] p-6">
+            <div className="mx-auto flex min-h-full items-center justify-center">
               <img
                 src={item.thumbnails[currentSlide]}
                 alt={`שקופית ${currentSlide + 1}`}
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                className="max-h-full max-w-full rounded-xl bg-white shadow-2xl"
               />
-            ) : (
-              <div className="text-gray-400 text-lg">אין תצוגה מקדימה</div>
-            )}
-          </div>
-
-          {/* Navigation */}
-          <div className="flex items-center justify-center gap-4 py-3 bg-gray-800 shrink-0">
-            <button
-              onClick={prev}
-              disabled={currentSlide === 0}
-              className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-white text-sm transition-colors"
-            >
-              ← הקודמת
-            </button>
-            <span className="text-gray-300 text-sm font-medium">{currentSlide + 1} / {total}</span>
-            <button
-              onClick={next}
-              disabled={currentSlide === total - 1}
-              className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-white text-sm transition-colors"
-            >
-              הבאה →
-            </button>
-          </div>
-        </div>
-
-        {/* Notes panel (left) */}
-        <div className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col p-3 gap-2">
-          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            הערות לשקופית {currentSlide + 1}
-          </h4>
-          <textarea
-            value={notes[currentSlide] ?? ''}
-            onChange={e => setNotes(n => ({ ...n, [currentSlide]: e.target.value }))}
-            placeholder="הוסף הערה..."
-            rows={8}
-            className="flex-1 resize-none text-sm border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-right"
-          />
-          <p className="text-[11px] text-gray-400 text-center">
-            לעריכת תוכן השקופית, הורד את הקובץ ועדכן ב-PowerPoint
-          </p>
+            </div>
+          </main>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-gray-900" dir="rtl">
+      <header className="flex items-center justify-between px-4 py-2.5 bg-gray-900 text-white shrink-0 border-b border-gray-800">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-lg leading-none shrink-0"
+            title="סגור"
+            aria-label="סגור"
+          >
+            ×
+          </button>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold truncate">{item.title}</h3>
+            {item.slideCount && item.slideCount > 0 && (
+              <p className="text-[11px] text-gray-400">
+                {item.slideCount} {item.type === 'pptx' ? 'שקופיות' : 'עמודים'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {hasUrl && (
+            <>
+              <div className="flex items-center bg-gray-800 rounded-lg p-0.5 text-[11px]">
+                <button
+                  onClick={() => { setViewer('office'); setIframeKey(key => key + 1); }}
+                  className={`px-2.5 py-1 rounded transition-colors ${
+                    viewer === 'office' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                  title="Microsoft Office Online"
+                >
+                  Office
+                </button>
+                <button
+                  onClick={() => { setViewer('gdocs'); setIframeKey(key => key + 1); }}
+                  className={`px-2.5 py-1 rounded transition-colors ${
+                    viewer === 'gdocs' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                  title="Google Docs Viewer"
+                >
+                  Google
+                </button>
+              </div>
+
+              <button
+                onClick={() => setIframeKey(key => key + 1)}
+                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-sm"
+                title="רענן"
+                aria-label="רענן"
+              >
+                ↻
+              </button>
+
+              <a
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-sm"
+                title="פתח בלשונית חדשה"
+              >
+                ↗
+              </a>
+            </>
+          )}
+
+          <button
+            onClick={onDownload}
+            disabled={!hasUrl}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <span>⬇</span>
+            <span>הורד</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-hidden bg-gray-200">
+        {hasUrl ? (
+          <iframe
+            key={`${viewer}-${iframeKey}`}
+            src={src}
+            title={item.title}
+            className="w-full h-full border-0 bg-white"
+            allow="fullscreen"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-8">
+            {item.thumbnails[0] ? (
+              <img
+                src={item.thumbnails[0]}
+                alt={item.title}
+                className="max-w-3xl max-h-[70vh] object-contain rounded-lg shadow-2xl"
+              />
+            ) : (
+              <div className="text-6xl">DOC</div>
+            )}
+            <p className="text-gray-300 text-sm">
+              הקובץ לא זמין לתצוגה מקוונת. לחץ "הורד" לצפייה מקומית.
+            </p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

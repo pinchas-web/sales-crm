@@ -68,7 +68,12 @@ export default function LightboxViewer({ item, initialIndex = 0, onClose }: Ligh
   if (item.type === 'pptx' || item.type === 'docx') {
     return (
       <div className="fixed inset-0 z-50 bg-black">
-        <SlideEditor item={item} onClose={onClose} onDownload={handleDownload} />
+        <SlideEditor
+          item={item}
+          initialIndex={initialIndex}
+          onClose={onClose}
+          onDownload={handleDownload}
+        />
       </div>
     );
   }

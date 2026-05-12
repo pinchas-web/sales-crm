@@ -8,8 +8,15 @@ import type { ContentType } from '../../types';
 import { detectContentType } from './useContentProcessor';
 
 const ALLOWED_EXTS = new Set([
-  'pdf', 'ppt', 'pptx', 'doc', 'docx',
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  'pdf',
+  // PowerPoint — כל הפורמטים (כולל macros ו-show-only)
+  'ppt', 'pptx', 'pptm', 'ppsx', 'pps', 'ppsm', 'potx', 'potm',
+  // Word — כל הפורמטים
+  'doc', 'docx', 'docm', 'dotx', 'dotm', 'rtf',
+  // Excel — מוצג בעמודת "מסמכים"
+  'xls', 'xlsx', 'xlsm', 'xlsb', 'csv',
+  // תמונות
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tiff',
 ]);
 
 function extOf(name: string): string {
@@ -83,7 +90,7 @@ export default function FileUploadZone({
         ) : (
           <>
             <p className="text-sm text-gray-600 font-medium">גרור קבצים לכאן, או לחץ לבחירה</p>
-            <p className="text-xs text-gray-400 mt-1">PDF · PPTX · DOCX · תמונות</p>
+            <p className="text-xs text-gray-400 mt-1">PDF · PPT/PPTX/PPTM · DOC/DOCX · XLSX · תמונות</p>
           </>
         )}
       </div>
