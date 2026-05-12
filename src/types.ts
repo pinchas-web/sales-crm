@@ -272,6 +272,7 @@ export interface AppState {
   // marketing
   marketingMessages: MarketingMessage[];
   marketingKnowledge: MarketingKnowledge[];
+  marketingDeletedWeeks?: string[];   // שבועות שנמחקו ע"י המשתמש — נשלחים ל-API ואז מתאפסים
   // config
   dropdownOptions: DropdownOptions;
   customFields: CustomField[];

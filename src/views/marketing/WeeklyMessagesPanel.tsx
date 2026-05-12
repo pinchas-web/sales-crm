@@ -70,9 +70,11 @@ interface StatusReelEditorProps {
 }
 
 function StatusReelEditor({ content, onChange }: StatusReelEditorProps) {
-  const reels = parseReels(content);
+  const rawReels     = parseReels(content);
+  const reels        = rawReels.length > 0 ? rawReels : [''];
   const textareaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
   const focusTarget  = useRef<{ index: number; cursor: number } | null>(null);
+  const savedCursors = useRef<Record<number, number>>({});
 
   useLayoutEffect(() => {
     const t = focusTarget.current;
@@ -80,23 +82,47 @@ function StatusReelEditor({ content, onChange }: StatusReelEditorProps) {
       const el = textareaRefs.current[t.index];
       if (el) { el.focus(); el.setSelectionRange(t.cursor, t.cursor); }
       focusTarget.current = null;
+      return;
+    }
+    // Restore cursor for the currently-focused textarea after React re-renders it
+    for (const [riStr, cursor] of Object.entries(savedCursors.current)) {
+      const el = textareaRefs.current[Number(riStr)];
+      if (el && document.activeElement === el) el.setSelectionRange(cursor, cursor);
     }
   });
+
+  function addReelAfter(ri: number) {
+    const updated = [...reels];
+    updated.splice(ri + 1, 0, '');
+    focusTarget.current = { index: ri + 1, cursor: 0 };
+    onChange(updated.join('\n---\n'));
+  }
+
+  function deleteReel(ri: number) {
+    if (reels.length <= 1) return;
+    const updated = reels.filter((_, i) => i !== ri);
+    focusTarget.current = { index: Math.min(ri, updated.length - 1), cursor: 0 };
+    onChange(updated.join('\n---\n'));
+  }
+
+  function moveReel(ri: number, dir: 'up' | 'down') {
+    if (dir === 'up' && ri === 0) return;
+    if (dir === 'down' && ri === reels.length - 1) return;
+    const updated = [...reels];
+    const other   = dir === 'up' ? ri - 1 : ri + 1;
+    [updated[ri], updated[other]] = [updated[other], updated[ri]];
+    focusTarget.current = { index: other, cursor: savedCursors.current[ri] ?? 0 };
+    onChange(updated.join('\n---\n'));
+  }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, ri: number) {
     if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
-      const ta     = e.currentTarget;
-      const cursor = ta.selectionStart;
-      const before = reels[ri].slice(0, cursor);
-      const after  = reels[ri].slice(cursor);
-      const updated = [...reels];
-      updated[ri] = before;
-      updated.splice(ri + 1, 0, after);
-      focusTarget.current = { index: ri + 1, cursor: 0 };
-      onChange(updated.join('\n---\n'));
+      addReelAfter(ri);
     }
   }
+
+  const btnCls = 'w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-xs transition-colors';
 
   return (
     <div className="space-y-2">
@@ -109,14 +135,25 @@ function StatusReelEditor({ content, onChange }: StatusReelEditorProps) {
           >
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-gray-500">רילס {ri + 1}</span>
-              <span className={`text-xs font-mono ${over ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
-                {reel.length}/145
-              </span>
+              <div className="flex items-center gap-0.5">
+                <button onClick={() => moveReel(ri, 'up')} disabled={ri === 0}
+                  title="הזז למעלה" className={`${btnCls} text-gray-400 hover:text-gray-700 disabled:opacity-20`}>↑</button>
+                <button onClick={() => moveReel(ri, 'down')} disabled={ri === reels.length - 1}
+                  title="הזז למטה" className={`${btnCls} text-gray-400 hover:text-gray-700 disabled:opacity-20`}>↓</button>
+                <button onClick={() => addReelAfter(ri)}
+                  title="הוסף רילס מתחת" className={`${btnCls} text-gray-400 hover:text-green-600 font-bold`}>+</button>
+                <button onClick={() => deleteReel(ri)} disabled={reels.length <= 1}
+                  title="מחק רילס" className={`${btnCls} text-gray-400 hover:text-red-500 disabled:opacity-20`}>🗑️</button>
+                <span className={`text-xs font-mono mr-1 ${over ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
+                  {reel.length}/145
+                </span>
+              </div>
             </div>
             <textarea
               ref={el => { textareaRefs.current[ri] = el; }}
               value={reel}
               onChange={e => {
+                savedCursors.current[ri] = e.target.selectionStart;
                 const updated = [...reels];
                 updated[ri] = e.target.value;
                 onChange(updated.join('\n---\n'));
@@ -252,7 +289,11 @@ export default function WeeklyMessagesPanel({ state, onUpdate }: Props) {
 
   function deleteWeekMessages() {
     if (!confirm('למחוק את כל המסרים לשבוע זה?')) return;
-    onUpdate({ ...state, marketingMessages: state.marketingMessages.filter(m => m.weekDate !== selectedWeek) });
+    onUpdate({
+      ...state,
+      marketingMessages: state.marketingMessages.filter(m => m.weekDate !== selectedWeek),
+      marketingDeletedWeeks: [selectedWeek],
+    });
     setSelectedPlatform(null);
   }
 

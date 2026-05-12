@@ -389,8 +389,7 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
   // מסרים שיווקיים
   const { data: rawMktMessages = [] } = await supabaseAdmin
     .from('marketing_messages').select('*')
-    .order('week_date', { ascending: false })
-    .order('sequence_order', { ascending: true });
+    .order('week_date', { ascending: false });
   const marketingMessages = (rawMktMessages ?? []).map(dbToMarketingMessage);
 
   if (!config) {
@@ -426,6 +425,7 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     // שיווק
     marketingKnowledge,
     marketingMessages,
+    marketingDeletedWeeks: [],
     currentUserId: uid,
   });
 }
@@ -706,7 +706,16 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     else console.log(`[CRM] marketing_knowledge ✓ deleted ${knowledgeToDelete.length} rows`);
   }
 
-  // ── מסרים שיווקיים: upsert + delete ─────────────────────────────────────────
+  // ── מסרים שיווקיים: upsert + delete (week-scoped) ───────────────────────────
+  // מחיקה מפורשת של שבועות שנמחקו ע"י המשתמש
+  const deletedWeeks: string[] = incoming.marketingDeletedWeeks ?? [];
+  if (deletedWeeks.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('marketing_messages').delete().in('week_date', deletedWeeks);
+    if (error) console.error('[CRM] marketing_messages explicit-delete ERROR:', error);
+    else console.log(`[CRM] marketing_messages ✓ deleted weeks: ${deletedWeeks.join(', ')}`);
+  }
+
   const messagesToSave: Row[] = incoming.marketingMessages ?? [];
   if (messagesToSave.length > 0) {
     const { error } = await supabaseAdmin
@@ -715,15 +724,21 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     if (error) console.error('[CRM] marketing_messages upsert ERROR:', JSON.stringify(error));
     else console.log(`[CRM] marketing_messages ✓ upserted ${messagesToSave.length} rows`);
   }
-  const { data: existingMessages = [] } = await supabaseAdmin.from('marketing_messages').select('id');
-  const incomingMessageIds = new Set((incoming.marketingMessages ?? []).map((m: Row) => m.id));
-  const messagesToDelete = (existingMessages ?? [])
-    .filter((m: Row) => !incomingMessageIds.has(m.id))
-    .map((m: Row) => m.id);
-  if (messagesToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('marketing_messages').delete().in('id', messagesToDelete);
-    if (error) console.error('[CRM] marketing_messages delete ERROR:', error);
-    else console.log(`[CRM] marketing_messages ✓ deleted ${messagesToDelete.length} rows`);
+
+  // מחיקה רק בתוך שבועות שמיוצגים ב-incoming — לא לנגוע בשבועות שנכתבו ע"י crm_sync.py
+  const incomingWeeks = [...new Set((messagesToSave).map((m: Row) => m.weekDate))];
+  if (incomingWeeks.length > 0) {
+    const { data: existingInWeeks = [] } = await supabaseAdmin
+      .from('marketing_messages').select('id').in('week_date', incomingWeeks);
+    const incomingMessageIds = new Set(messagesToSave.map((m: Row) => m.id));
+    const messagesToDelete = (existingInWeeks ?? [])
+      .filter((m: Row) => !incomingMessageIds.has(m.id))
+      .map((m: Row) => m.id);
+    if (messagesToDelete.length > 0) {
+      const { error } = await supabaseAdmin.from('marketing_messages').delete().in('id', messagesToDelete);
+      if (error) console.error('[CRM] marketing_messages delete ERROR:', error);
+      else console.log(`[CRM] marketing_messages ✓ deleted ${messagesToDelete.length} stale rows`);
+    }
   }
 
   console.log('[CRM POST] ✓ done');

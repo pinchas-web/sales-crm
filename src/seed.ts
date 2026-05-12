@@ -245,6 +245,7 @@ export const SEED_STATE: AppState = {
   contentItems: [],
 
   // ─── Marketing (empty by default) ───────────────────────────────────────────
-  marketingMessages:  [],
-  marketingKnowledge: [],
+  marketingMessages:     [],
+  marketingKnowledge:    [],
+  marketingDeletedWeeks: [],
 };
