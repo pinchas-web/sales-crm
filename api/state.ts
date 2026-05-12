@@ -232,6 +232,7 @@ function dbToContentItem(r: Row): Row {
     thumbnails:     r.thumbnails       ?? [],
     videoUrl:       r.video_url,
     videoThumbnail: r.video_thumbnail,
+    slideCount:     r.slide_count      ?? null,
     order:          r.order            ?? 0,
   };
 }
@@ -247,7 +248,60 @@ function contentItemToDb(ci: Row): Row {
     thumbnails:      ci.thumbnails     ?? [],
     video_url:       ci.videoUrl       ?? null,
     video_thumbnail: ci.videoThumbnail ?? null,
+    slide_count:     ci.slideCount     ?? null,
     order:           ci.order          ?? 0,
+  };
+}
+
+// ── Marketing Knowledge ────────────────────────────────────────────────────────
+
+function dbToMarketingKnowledge(r: Row): Row {
+  return {
+    id:        r.id,
+    category:  r.category,
+    title:     r.title,
+    content:   r.content,
+    updatedAt: r.updated_at,
+  };
+}
+
+function marketingKnowledgeToDb(k: Row): Row {
+  return {
+    id:         k.id,
+    category:   k.category  ?? 'products',
+    title:      k.title     ?? '',
+    content:    k.content   ?? '',
+    updated_at: k.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+// ── Marketing Messages ─────────────────────────────────────────────────────────
+
+function dbToMarketingMessage(r: Row): Row {
+  return {
+    id:            r.id,
+    weekDate:      r.week_date,
+    platform:      r.platform,
+    content:       r.content,
+    ctaType:       r.cta_type,
+    status:        r.status,
+    sourceContent: r.source_content,
+    createdAt:     r.created_at,
+    updatedAt:     r.updated_at,
+  };
+}
+
+function marketingMessageToDb(m: Row): Row {
+  return {
+    id:             m.id,
+    week_date:      m.weekDate      ?? '',
+    platform:       m.platform      ?? 'whatsapp_status',
+    content:        m.content       ?? '',
+    cta_type:       m.ctaType       ?? 'nurture',
+    status:         m.status        ?? 'draft',
+    source_content: m.sourceContent ?? null,
+    created_at:     m.createdAt,
+    updated_at:     m.updatedAt     ?? new Date().toISOString(),
   };
 }
 
@@ -325,6 +379,16 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     : { data: [] };
   const contentItems = (rawContentItems ?? []).map(dbToContentItem);
 
+  // מאגר ידע שיווקי
+  const { data: rawMktKnowledge = [] } = await supabaseAdmin
+    .from('marketing_knowledge').select('*').order('category', { ascending: true });
+  const marketingKnowledge = (rawMktKnowledge ?? []).map(dbToMarketingKnowledge);
+
+  // מסרים שיווקיים
+  const { data: rawMktMessages = [] } = await supabaseAdmin
+    .from('marketing_messages').select('*').order('week_date', { ascending: false });
+  const marketingMessages = (rawMktMessages ?? []).map(dbToMarketingMessage);
+
   if (!config) {
     // הפעלה ראשונה — אין קונפיגורציה עדיין
     return res.status(200).json(null);
@@ -355,6 +419,9 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     courses,
     lessons,
     contentItems,
+    // שיווק
+    marketingKnowledge,
+    marketingMessages,
     currentUserId: uid,
   });
 }
@@ -613,6 +680,46 @@ async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, 
     const { error } = await supabaseAdmin.from('content_items').delete().in('id', contentToDelete);
     if (error) console.error('[CRM] content_items delete ERROR:', error);
     else console.log(`[CRM] content_items ✓ deleted ${contentToDelete.length} rows`);
+  }
+
+  // ── מאגר ידע שיווקי: upsert + delete ────────────────────────────────────────
+  const knowledgeToSave: Row[] = incoming.marketingKnowledge ?? [];
+  if (knowledgeToSave.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('marketing_knowledge')
+      .upsert(knowledgeToSave.map(marketingKnowledgeToDb));
+    if (error) console.error('[CRM] marketing_knowledge upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] marketing_knowledge ✓ upserted ${knowledgeToSave.length} rows`);
+  }
+  const { data: existingKnowledge = [] } = await supabaseAdmin.from('marketing_knowledge').select('id');
+  const incomingKnowledgeIds = new Set((incoming.marketingKnowledge ?? []).map((k: Row) => k.id));
+  const knowledgeToDelete = (existingKnowledge ?? [])
+    .filter((k: Row) => !incomingKnowledgeIds.has(k.id))
+    .map((k: Row) => k.id);
+  if (knowledgeToDelete.length > 0) {
+    const { error } = await supabaseAdmin.from('marketing_knowledge').delete().in('id', knowledgeToDelete);
+    if (error) console.error('[CRM] marketing_knowledge delete ERROR:', error);
+    else console.log(`[CRM] marketing_knowledge ✓ deleted ${knowledgeToDelete.length} rows`);
+  }
+
+  // ── מסרים שיווקיים: upsert + delete ─────────────────────────────────────────
+  const messagesToSave: Row[] = incoming.marketingMessages ?? [];
+  if (messagesToSave.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('marketing_messages')
+      .upsert(messagesToSave.map(marketingMessageToDb));
+    if (error) console.error('[CRM] marketing_messages upsert ERROR:', JSON.stringify(error));
+    else console.log(`[CRM] marketing_messages ✓ upserted ${messagesToSave.length} rows`);
+  }
+  const { data: existingMessages = [] } = await supabaseAdmin.from('marketing_messages').select('id');
+  const incomingMessageIds = new Set((incoming.marketingMessages ?? []).map((m: Row) => m.id));
+  const messagesToDelete = (existingMessages ?? [])
+    .filter((m: Row) => !incomingMessageIds.has(m.id))
+    .map((m: Row) => m.id);
+  if (messagesToDelete.length > 0) {
+    const { error } = await supabaseAdmin.from('marketing_messages').delete().in('id', messagesToDelete);
+    if (error) console.error('[CRM] marketing_messages delete ERROR:', error);
+    else console.log(`[CRM] marketing_messages ✓ deleted ${messagesToDelete.length} rows`);
   }
 
   console.log('[CRM POST] ✓ done');

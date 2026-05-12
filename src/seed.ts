@@ -22,8 +22,9 @@ export const SEED_STATE: AppState = {
     { id: 'tasks',    visible: true,  order: 4 },
     { id: 'data',     visible: true,  order: 5 },
     { id: 'chat',     visible: true,  order: 6 },
-    { id: 'courses',  visible: true,  order: 7 },
-    { id: 'settings', visible: true,  order: 8 },
+    { id: 'courses',   visible: true,  order: 7 },
+    { id: 'marketing', visible: true,  order: 8 },
+    { id: 'settings',  visible: true,  order: 9 },
   ],
 
   users: [
@@ -242,4 +243,8 @@ export const SEED_STATE: AppState = {
   courses:      [],
   lessons:      [],
   contentItems: [],
+
+  // ─── Marketing (empty by default) ───────────────────────────────────────────
+  marketingMessages:  [],
+  marketingKnowledge: [],
 };

@@ -15,6 +15,8 @@ export interface User {
   commissionRate: number;        // 0.10 = 10%
   email?: string;                // מייל לזיהוי מול Supabase Auth
   password?: string;             // סיסמה — גלויה למנהל בלבד
+  phone?: string;                // טלפון
+  allowedTabs?: string[];        // לשוניות מותרות — undefined = ללא הגבלה (מנהל)
 }
 
 export interface Status {
@@ -217,7 +219,35 @@ export interface ContentItem {
   thumbnails: string[];    // slide/page preview image URLs (data URLs or Supabase URLs)
   videoUrl?: string;       // Vimeo embed URL
   videoThumbnail?: string; // Vimeo thumbnail image URL
+  slideCount?: number;     // real slide/page count (may exceed thumbnails.length if only cover)
   order: number;
+}
+
+// ─── Marketing ────────────────────────────────────────────────────────────────
+
+export type MarketingPlatform = 'whatsapp_status' | 'whatsapp_group' | 'email' | 'blog' | 'youtube';
+export type MarketingCtaType  = 'webinar' | 'strategy_call' | 'course' | 'nurture';
+export type MarketingMsgStatus = 'draft' | 'approved' | 'sent';
+export type MarketingKnowledgeCategory = 'products' | 'audience' | 'style' | 'ctas';
+
+export interface MarketingKnowledge {
+  id: string;
+  category: MarketingKnowledgeCategory;
+  title: string;
+  content: string;
+  updatedAt: string;
+}
+
+export interface MarketingMessage {
+  id: string;
+  weekDate: string;           // ISO date — ראשון לשבוע
+  platform: MarketingPlatform;
+  content: string;
+  ctaType: MarketingCtaType;
+  status: MarketingMsgStatus;
+  sourceContent?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── App State ────────────────────────────────────────────────────────────────
@@ -238,6 +268,9 @@ export interface AppState {
   courses: Course[];
   lessons: Lesson[];
   contentItems: ContentItem[];
+  // marketing
+  marketingMessages: MarketingMessage[];
+  marketingKnowledge: MarketingKnowledge[];
   // config
   dropdownOptions: DropdownOptions;
   customFields: CustomField[];

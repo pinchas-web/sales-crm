@@ -10,7 +10,7 @@ import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, Pinn
 import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
 
-import LoginScreen   from './views/LoginScreen';
+import LoginScreen, { ResetPasswordScreen } from './views/LoginScreen';
 import HomePage      from './views/HomePage';
 import LeadsView     from './views/LeadsView';
 // טעינה עצלה — CoursesView כולל pdfjs-dist, מופרד לchunk נפרד
@@ -20,7 +20,8 @@ import ProductsView  from './views/ProductsView';
 import TasksView     from './views/TasksView';
 import DataView      from './views/DataView';
 import ChatView      from './views/ChatView';
-import SettingsPanel from './views/SettingsPanel';
+import SettingsPanel   from './views/SettingsPanel';
+import MarketingView   from './views/MarketingView';
 
 // ─── State merge ──────────────────────────────────────────────────────────────
 
@@ -162,8 +163,17 @@ function UserBadge({ state }: { state: AppState }) {
 
 export default function App() {
   // ── Auth state ────────────────────────────────────────────────────────────
-  const [session, setSession]   = useState<Session | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [session, setSession]               = useState<Session | null>(null);
+  const [authLoading, setAuthLoading]       = useState(true);
+  const [authNotice, setAuthNotice]         = useState('');
+
+  // זיהוי שחזור סיסמא מה-URL באופן מיידי (לפני שה-events מגיעים)
+  // תומך בזרימת implicit (#type=recovery) וגם PKCE (?type=recovery)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
+    const hashType   = new URLSearchParams(window.location.hash.slice(1)).get('type');
+    const searchType = new URLSearchParams(window.location.search).get('type');
+    return hashType === 'recovery' || searchType === 'recovery';
+  });
 
   useEffect(() => {
     // בדיקת session קיים בטעינה
@@ -172,8 +182,14 @@ export default function App() {
       setAuthLoading(false);
     });
 
-    // האזנה לשינויים — login / logout / token refresh
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // האזנה לשינויים — login / logout / token refresh / password recovery
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      } else if (event === 'SIGNED_OUT') {
+        // רק בהתנתקות מנקים את דגל השחזור (לא ב-SIGNED_IN שנוצר מה-recovery)
+        setIsPasswordRecovery(false);
+      }
       setSession(session);
     });
 
@@ -194,9 +210,16 @@ export default function App() {
     didLoad.current = true;
     apiLoadState()
       .then(data => {
+        setAuthNotice('');
         if (data) setState(mergeState(data as Partial<AppState>));
       })
-      .catch(err => console.error('CRM: failed to load state', err))
+      .catch(async err => {
+        console.error('CRM: failed to load state', err);
+        if ((err as Error & { status?: number }).status === 401) {
+          setAuthNotice('המשתמש הזה עדיין לא אושר על ידי מנהל. אחרי שהמנהל יוסיף את המייל שלך במסך המשתמשים, תוכל להיכנס.');
+          await supabase.auth.signOut();
+        }
+      })
       .finally(() => setLoading(false));
   }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -487,15 +510,28 @@ export default function App() {
     { id: 'tasks',    icon: '✅', defaultLabel: 'משימות'  },
     { id: 'data',     icon: '📊', defaultLabel: 'נתונים'  },
     { id: 'chat',     icon: '💬', defaultLabel: "צ'אט"    },
-    { id: 'courses',  icon: '📚', defaultLabel: 'קורסים'  },
-    { id: 'settings', icon: '⚙️', defaultLabel: 'הגדרות'  },
+    { id: 'courses',   icon: '📚', defaultLabel: 'קורסים'  },
+    { id: 'marketing', icon: '📣', defaultLabel: 'שיווק'   },
+    { id: 'settings',  icon: '⚙️', defaultLabel: 'הגדרות'  },
   ];
+
+  // המשתמש הנוכחי (או המשתמש הנצפה במצב view-as)
+  const navUserId = viewAsId ?? state.currentUserId;
+  const navUser   = state.users.find(u => u.id === navUserId);
 
   const visibleTabs = [...state.navConfig]
     .filter(t => t.visible)
     .sort((a, b) => a.order - b.order)
     .map(t => NAV_TABS.find(n => n.id === t.id))
-    .filter((t): t is typeof NAV_TABS[0] => !!t);
+    .filter((t): t is typeof NAV_TABS[0] => !!t)
+    // TEMP BYPASS — כל הלשוניות פתוחות לכולם עד שנתקן את התפקיד
+    .filter(() => {
+      void navUser;
+      return true;
+      // if (!navUser || navUser.role === 'admin') return true;
+      // if (!navUser.allowedTabs) return true;
+      // return navUser.allowedTabs.includes(t.id);
+    });
 
   const unreadChat = state.chatMessages.filter(m =>
     m.fromUserId !== state.currentUserId && !m.readBy.includes(state.currentUserId)
@@ -520,9 +556,14 @@ export default function App() {
     );
   }
 
+  // מסך איפוס סיסמא — מגיע מקישור במייל
+  if (isPasswordRecovery) {
+    return <ResetPasswordScreen onDone={() => setIsPasswordRecovery(false)} />;
+  }
+
   // אין session — מציג מסך כניסה
   if (!session) {
-    return <LoginScreen />;
+    return <LoginScreen initialMessage={authNotice} />;
   }
 
   // טעינת נתונים ראשונית
@@ -657,6 +698,7 @@ export default function App() {
             />
           </Suspense>
         )}
+        {activeTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
         {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>
 
