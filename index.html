@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Mobile viewport: respect safe areas (notch, home indicator) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- iOS standalone / PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CRM פנחס" />
+
+    <!-- Android Chrome -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#821828" />
+
+    <!-- Prevent phone number detection -->
+    <meta name="format-detection" content="telephone=no" />
+
     <title>CRM - ניהול לידים</title>
   </head>
   <body>

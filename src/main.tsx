@@ -4,6 +4,14 @@ import './index.css'
 import App from './App.tsx'
 import { loadSavedDesign } from './views/DesignEditor.tsx'
 
+// טעינת CSS מובייל כשרץ בתוך Capacitor (native WebView)
+if (
+  window.navigator.userAgent.includes('Capacitor') ||
+  !!(window as unknown as Record<string, unknown>)['Capacitor']
+) {
+  import('./mobile.css');
+}
+
 // החל עיצוב שמור מ-localStorage לפני רינדור ראשון
 loadSavedDesign();
 

@@ -81,11 +81,15 @@ function localForgotPasswordApi(): Plugin {
 export default defineConfig({
   plugins: [localForgotPasswordApi(), react()],
 
-  // נתיב מוחלט לVercel (לא יחסי כמו בתוסף WP)
+  // '/' for Vercel web; Capacitor 6+ resolves assets via https://localhost/ on both platforms
   base: '/',
 
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  },
+
   server: {
-    // פרוקסי לפיתוח מקומי — מעביר /api/* ל-Vercel dev server
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

@@ -10,10 +10,17 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "slides:convert": "node scripts/powerpoint-conversion-worker.mjs --once",
-    "slides:watch": "node scripts/powerpoint-conversion-worker.mjs"
+    "slides:watch": "node scripts/powerpoint-conversion-worker.mjs",
+    "cap:sync": "vite build && npx cap sync",
+    "cap:ios": "vite build && npx cap sync ios && npx cap open ios",
+    "cap:android": "vite build && npx cap sync android && npx cap open android"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.99.1",
     "chart.js": "^4.5.1",
