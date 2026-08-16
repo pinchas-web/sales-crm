@@ -251,6 +251,42 @@ export interface MarketingMessage {
   updatedAt: string;
 }
 
+// ─── Finance ──────────────────────────────────────────────────────────────────
+
+export type FinanceTxType = 'income' | 'expense';
+
+export interface FinanceCategory {
+  id: string;
+  name: string;
+  icon: string;            // emoji
+  type: FinanceTxType | 'both';
+  budget?: number;         // monthly budget (expenses) or target (income)
+  color: string;           // hex
+  order: number;
+}
+
+export interface FinanceTx {
+  id: string;
+  date: string;            // YYYY-MM-DD
+  amount: number;          // positive
+  type: FinanceTxType;
+  categoryId: string;
+  note?: string;
+  source: 'manual' | 'csv' | 'recurring';
+  recurringId?: string;
+}
+
+export interface FinanceRecurring {
+  id: string;
+  name: string;
+  amount: number;
+  type: FinanceTxType;
+  categoryId: string;
+  dayOfMonth: number;      // 1-28
+  active: boolean;
+  note?: string;
+}
+
 // ─── App State ────────────────────────────────────────────────────────────────
 
 export interface AppState {
@@ -282,4 +318,9 @@ export interface AppState {
   labels: Record<string, string>;
   navConfig: NavTabConfig[];
   dailySummaryEmail: string;
+  // finance
+  financeCategories: FinanceCategory[];
+  financeTxs: FinanceTx[];
+  financeRecurring: FinanceRecurring[];
+  financeLastRecurringMonth?: string; // YYYY-MM — last month recurring was applied
 }
