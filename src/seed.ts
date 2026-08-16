@@ -24,7 +24,8 @@ export const SEED_STATE: AppState = {
     { id: 'chat',     visible: true,  order: 6 },
     { id: 'courses',   visible: true,  order: 7 },
     { id: 'marketing', visible: true,  order: 8 },
-    { id: 'settings',  visible: true,  order: 9 },
+    { id: 'finance',   visible: true,  order: 9 },
+    { id: 'settings',  visible: true,  order: 10 },
   ],
 
   users: [
@@ -248,4 +249,30 @@ export const SEED_STATE: AppState = {
   marketingMessages:     [],
   marketingKnowledge:    [],
   marketingDeletedWeeks: [],
+
+  // ─── Finance ─────────────────────────────────────────────────────────────────
+  financeCategories: [
+    // הכנסות
+    { id: 'fc_salary',    name: 'משכורת',        icon: '💼', type: 'income',   budget: 0,    color: '#22c55e', order: 0 },
+    { id: 'fc_freelance', name: 'הכנסה עצמאית',  icon: '💡', type: 'income',   budget: 0,    color: '#10b981', order: 1 },
+    { id: 'fc_rental',    name: 'שכירות / דמי שכירות', icon: '🏘️', type: 'income', budget: 0, color: '#059669', order: 2 },
+    { id: 'fc_other_in',  name: 'הכנסה אחרת',    icon: '➕', type: 'income',   budget: 0,    color: '#6ee7b7', order: 3 },
+    // הוצאות
+    { id: 'fc_housing',   name: 'דיור',           icon: '🏠', type: 'expense',  budget: 6000, color: '#6366f1', order: 10 },
+    { id: 'fc_food',      name: 'מזון וקניות',    icon: '🛒', type: 'expense',  budget: 4000, color: '#f59e0b', order: 11 },
+    { id: 'fc_car',       name: 'רכב ותחבורה',    icon: '🚗', type: 'expense',  budget: 2000, color: '#ef4444', order: 12 },
+    { id: 'fc_health',    name: 'בריאות',          icon: '💊', type: 'expense',  budget: 800,  color: '#ec4899', order: 13 },
+    { id: 'fc_kids',      name: 'ילדים',           icon: '👶', type: 'expense',  budget: 3000, color: '#8b5cf6', order: 14 },
+    { id: 'fc_edu',       name: 'חינוך',           icon: '📚', type: 'expense',  budget: 1000, color: '#3b82f6', order: 15 },
+    { id: 'fc_utilities', name: 'חשמל / מים / גז', icon: '⚡', type: 'expense',  budget: 600,  color: '#0ea5e9', order: 16 },
+    { id: 'fc_comm',      name: 'תקשורת ואינטרנט', icon: '📱', type: 'expense',  budget: 400,  color: '#06b6d4', order: 17 },
+    { id: 'fc_insurance', name: 'ביטוח',           icon: '🛡️', type: 'expense',  budget: 800,  color: '#64748b', order: 18 },
+    { id: 'fc_entertain', name: 'בידור ופנאי',     icon: '🎬', type: 'expense',  budget: 1000, color: '#f97316', order: 19 },
+    { id: 'fc_clothing',  name: 'ביגוד',           icon: '👕', type: 'expense',  budget: 500,  color: '#a855f7', order: 20 },
+    { id: 'fc_saving',    name: 'חיסכון / השקעה',  icon: '💰', type: 'expense',  budget: 2000, color: '#14b8a6', order: 21 },
+    { id: 'fc_other_ex',  name: 'הוצאה אחרת',     icon: '📋', type: 'expense',  budget: 500,  color: '#94a3b8', order: 22 },
+  ],
+  financeTxs: [],
+  financeRecurring: [],
+  financeLastRecurringMonth: '',
 };

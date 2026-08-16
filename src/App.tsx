@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, apiLoadState, apiSaveState } from './api';
-import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, PinnedNote, CustomField, Course, Lesson, ContentItem } from './types';
+import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, PinnedNote, CustomField, Course, Lesson, ContentItem, FinanceTx, FinanceCategory, FinanceRecurring } from './types';
 import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
 
@@ -22,6 +22,7 @@ import DataView      from './views/DataView';
 import ChatView      from './views/ChatView';
 import SettingsPanel   from './views/SettingsPanel';
 import MarketingView   from './views/MarketingView';
+import FinanceView     from './views/FinanceView';
 
 // ─── State merge ──────────────────────────────────────────────────────────────
 
@@ -35,6 +36,13 @@ function mergeState(parsed: Partial<AppState>): AppState {
       return saved ?? tab;
     }),
     labels: { ...(parsed.labels ?? {}) },
+    // Finance: keep saved data, fall back to seed categories if none saved
+    financeCategories: (parsed.financeCategories && parsed.financeCategories.length > 0)
+      ? parsed.financeCategories
+      : SEED_STATE.financeCategories,
+    financeTxs:        parsed.financeTxs        ?? [],
+    financeRecurring:  parsed.financeRecurring   ?? [],
+    financeLastRecurringMonth: parsed.financeLastRecurringMonth ?? '',
   };
 }
 
@@ -494,6 +502,47 @@ export default function App() {
   const handleDeleteContentItem = useCallback((id: string) =>
     setState(s => ({ ...s, contentItems: s.contentItems.filter(ci => ci.id !== id) })), []);
 
+  // ── Finance handlers ───────────────────────────────────────────────────────
+
+  const handleAddFinanceTxs = useCallback((txs: FinanceTx[]) =>
+    setState(s => ({ ...s, financeTxs: [...s.financeTxs, ...txs] })), []);
+
+  const handleUpdateFinanceTx = useCallback((id: string, updates: Partial<FinanceTx>) =>
+    setState(s => ({ ...s, financeTxs: s.financeTxs.map(t => t.id === id ? { ...t, ...updates } : t) })), []);
+
+  const handleDeleteFinanceTx = useCallback((id: string) =>
+    setState(s => ({ ...s, financeTxs: s.financeTxs.filter(t => t.id !== id) })), []);
+
+  const handleUpdateFinanceCat = useCallback((id: string, updates: Partial<FinanceCategory>) =>
+    setState(s => ({ ...s, financeCategories: s.financeCategories.map(c => c.id === id ? { ...c, ...updates } : c) })), []);
+
+  const handleSaveFinanceRecurring = useCallback((r: FinanceRecurring) =>
+    setState(s => ({
+      ...s,
+      financeRecurring: s.financeRecurring.some(x => x.id === r.id)
+        ? s.financeRecurring.map(x => x.id === r.id ? r : x)
+        : [...s.financeRecurring, r],
+    })), []);
+
+  const handleDeleteFinanceRecurring = useCallback((id: string) =>
+    setState(s => ({ ...s, financeRecurring: s.financeRecurring.filter(r => r.id !== id) })), []);
+
+  const handleApplyRecurring = useCallback((month: string) => {
+    setState(s => {
+      const [y, m] = month.split('-').map(Number);
+      const newTxs: FinanceTx[] = s.financeRecurring.filter(r => r.active).map(r => {
+        const day = Math.min(r.dayOfMonth, new Date(y, m, 0).getDate());
+        const date = `${month}-${String(day).padStart(2, '0')}`;
+        return {
+          id: uid(), date, amount: r.amount, type: r.type,
+          categoryId: r.categoryId, note: r.name,
+          source: 'recurring' as const, recurringId: r.id,
+        };
+      });
+      return { ...s, financeTxs: [...s.financeTxs, ...newTxs], financeLastRecurringMonth: month };
+    });
+  }, []);
+
   // ── Full state update for settings ────────────────────────────────────────
 
   const handleUpdateState = useCallback((newState: AppState) => setState(newState), []);
@@ -512,6 +561,7 @@ export default function App() {
     { id: 'chat',     icon: '💬', defaultLabel: "צ'אט"    },
     { id: 'courses',   icon: '📚', defaultLabel: 'קורסים'  },
     { id: 'marketing', icon: '📣', defaultLabel: 'שיווק'   },
+    { id: 'finance',   icon: '💰', defaultLabel: 'כספים'   },
     { id: 'settings',  icon: '⚙️', defaultLabel: 'הגדרות'  },
   ];
 
@@ -699,6 +749,18 @@ export default function App() {
           </Suspense>
         )}
         {activeTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
+        {activeTab === 'finance' && (
+          <FinanceView
+            state={effectiveState}
+            onAddTxs={handleAddFinanceTxs}
+            onUpdateTx={handleUpdateFinanceTx}
+            onDeleteTx={handleDeleteFinanceTx}
+            onUpdateCategory={handleUpdateFinanceCat}
+            onSaveRecurring={handleSaveFinanceRecurring}
+            onDeleteRecurring={handleDeleteFinanceRecurring}
+            onApplyRecurring={handleApplyRecurring}
+          />
+        )}
         {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>
 
