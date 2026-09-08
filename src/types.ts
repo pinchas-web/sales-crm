@@ -106,6 +106,123 @@ export interface OnboardingStep {
   defaultAssigneeRole?: UserRole;
 }
 
+/**
+ * V2 Product Operations Plan
+ * התבנית התפעולית של המוצר: מה הוא כולל ומה צריך לקרות לאורך חיי הלקוח.
+ * בשלב זה הנתונים נשמרים בתוך Product. בשלב הבא הם ישמשו ליצירת מסע לקוח בפועל.
+ */
+export type ProductInclusionCategory =
+  | 'session'
+  | 'content'
+  | 'support'
+  | 'community'
+  | 'review'
+  | 'other';
+
+export interface ProductInclusion {
+  id: string;
+  title: string;
+  description?: string;
+  category: ProductInclusionCategory;
+  quantity?: number;
+  order: number;
+}
+
+export type ProductLifecyclePhase =
+  | 'onboarding'
+  | 'delivery'
+  | 'retention'
+  | 'completion';
+
+export interface ProductLifecycleStep {
+  id: string;
+  title: string;
+  description?: string;
+  phase: ProductLifecyclePhase;
+  order: number;
+  timingLabel?: string;           // למשל: "שבוע 2", "לאחר מפגש 4"
+  required: boolean;
+  defaultAssigneeRole?: UserRole;
+}
+
+export type ProductTouchpointType =
+  | 'call'
+  | 'whatsapp'
+  | 'email'
+  | 'meeting'
+  | 'survey'
+  | 'task';
+
+export type ProductTouchpointTiming =
+  | 'days_after_start'
+  | 'days_before_end'
+  | 'recurring';
+
+export interface ProductTouchpoint {
+  id: string;
+  title: string;
+  description?: string;
+  type: ProductTouchpointType;
+  timing: ProductTouchpointTiming;
+  dayOffset?: number;             // ימים מהתחלה / לפני הסיום
+  intervalDays?: number;          // עבור recurring
+  active: boolean;
+  defaultAssigneeRole?: UserRole;
+}
+
+export type ProductMetricDirection = 'increase' | 'decrease' | 'maintain';
+export type ProductMetricCadence = 'start_end' | 'weekly' | 'monthly' | 'manual';
+
+export interface ProductSuccessMetric {
+  id: string;
+  name: string;
+  description?: string;
+  unit?: string;
+  direction: ProductMetricDirection;
+  cadence: ProductMetricCadence;
+  defaultTarget?: number;
+  order: number;
+}
+
+export type ProductRiskSignal =
+  | 'no_contact'
+  | 'missed_tasks'
+  | 'missed_meetings'
+  | 'payment_overdue'
+  | 'health_score'
+  | 'manual';
+
+export interface ProductRiskRule {
+  id: string;
+  name: string;
+  signal: ProductRiskSignal;
+  threshold?: number;
+  actionText: string;
+  active: boolean;
+}
+
+export interface ProductRetentionPlan {
+  checkInFrequencyDays?: number;
+  renewalLeadDays?: number;
+  askTestimonialOnSuccess: boolean;
+  askReferralOnSuccess: boolean;
+  upsellProductId?: string;
+  completionReviewRequired: boolean;
+  notes?: string;
+}
+
+export interface ProductOperationsPlan {
+  durationWeeks?: number;
+  internalOwnerRole?: UserRole;
+  internalNotes?: string;
+  inclusions: ProductInclusion[];
+  lifecycleSteps: ProductLifecycleStep[];
+  touchpoints: ProductTouchpoint[];
+  successMetrics: ProductSuccessMetric[];
+  riskRules: ProductRiskRule[];
+  retention: ProductRetentionPlan;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -118,6 +235,7 @@ export interface Product {
   contractText?: string;
   testimonials: ProductTestimonial[];
   onboardingSteps: OnboardingStep[];
+  operationsPlan?: ProductOperationsPlan;
   active: boolean;
   createdAt: string;
 }
