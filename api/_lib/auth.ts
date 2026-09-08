@@ -31,7 +31,7 @@ export async function validateRequest(authHeader: string | undefined): Promise<C
   }
 
   const email = user.email?.trim().toLowerCase();
-  if (!email) {
+  if (!email || !user.email_confirmed_at) {
     console.error(`[CRM auth] FAILED: auth_user_id=${user.id} has no email`);
     return null;
   }

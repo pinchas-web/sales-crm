@@ -109,7 +109,7 @@ export async function apiRegister(params: {
  * הם יכולים להיות עשרות MB ולחרוג מה-4.5MB limit של Vercel.
  * thumbnails נשמרים ב-Supabase Storage ומוחלפים ב-URLs קצרים ב-handleFilesAccepted.
  */
-export async function apiSaveState(state: unknown): Promise<void> {
+export async function apiSaveState(state: unknown, before: unknown): Promise<void> {
   console.log('[CRM] apiSaveState called — sending POST /api/state');
 
   // Strip base64 data URLs from thumbnails — keep only http/https Storage URLs
@@ -125,7 +125,7 @@ export async function apiSaveState(state: unknown): Promise<void> {
   const res = await fetch('/api/state', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ ...s, contentItems }),
+    body: JSON.stringify({ before, after: { ...s, contentItems } }),
   });
 
   if (!res.ok) {

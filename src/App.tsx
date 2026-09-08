@@ -22,6 +22,7 @@ import DataView      from './views/DataView';
 import ChatView      from './views/ChatView';
 import SettingsPanel   from './views/SettingsPanel';
 import MarketingView   from './views/MarketingView';
+import IntegrationsView from './views/IntegrationsView';
 
 // ─── State merge ──────────────────────────────────────────────────────────────
 
@@ -201,47 +202,77 @@ export default function App() {
   const [activeTab, setActiveTab]             = useState('home');
   const [pendingOnboarding, setPendingOnboarding] = useState<Lead | null>(null);
   const [loading, setLoading]                 = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const loadedState = useRef<AppState | null>(null);
+  const saveQueue = useRef(Promise.resolve());
+  const saveBlocked = useRef(false);
   const [viewAsId, setViewAsId]               = useState<string | null>(null);
 
   // טעינה ראשונית מ-API (רק כשיש session)
   const didLoad = useRef(false);
   useEffect(() => {
-    if (!session || didLoad.current) return;
+    if (!session || isPasswordRecovery || didLoad.current) return;
     didLoad.current = true;
+    let cancelled = false;
     apiLoadState()
       .then(data => {
+        if (cancelled) return;
+        if (!data) throw new Error('CRM configuration is missing');
         setAuthNotice('');
-        if (data) setState(mergeState(data as Partial<AppState>));
+        const next = mergeState(data as Partial<AppState>);
+        loadedState.current = next;
+        setState(next);
       })
       .catch(async err => {
+        if (cancelled) return;
+        setLoadError(true);
         console.error('CRM: failed to load state', err);
         if ((err as Error & { status?: number }).status === 401) {
           setAuthNotice('המשתמש הזה עדיין לא אושר על ידי מנהל. אחרי שהמנהל יוסיף את המייל שלך במסך המשתמשים, תוכל להיכנס.');
           await supabase.auth.signOut();
         }
       })
-      .finally(() => setLoading(false));
-  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; didLoad.current = false; };
+  }, [session?.user.id, isPasswordRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // איפוס כשמשתמש מתנתק
   useEffect(() => {
     if (!session) {
       setState(SEED_STATE);
       setLoading(true);
+      setLoadError(false);
+      setSaveError(false);
+      loadedState.current = null;
+      saveBlocked.current = false;
       didLoad.current = false;
     }
   }, [session]);
 
   // שמירה אוטומטית בכל שינוי state (או כשהטעינה מסתיימת)
   useEffect(() => {
-    if (loading || !session) return;
-    console.log('[CRM] state changed — triggering save. leads:', state.leads.length, 'tasks:', state.tasks.length, 'activities:', state.activities.length);
-    apiSaveState(state).catch(err => console.error('[CRM] save FAILED:', err));
-  }, [state, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (loading || loadError || saveError || !session || isPasswordRecovery || state === loadedState.current) return;
+    const owner = session.user.id;
+    const timer = window.setTimeout(() => {
+      saveQueue.current = saveQueue.current.then(async () => {
+        if (saveBlocked.current) return;
+        const { data: { session: current } } = await supabase.auth.getSession();
+        if (current?.user.id !== owner) return;
+        await apiSaveState(state, loadedState.current);
+        loadedState.current = state;
+      }).catch(err => {
+        saveBlocked.current = true;
+        console.error('CRM: save failed', err);
+        setSaveError(true);
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [state, loading, loadError, saveError, session?.user.id, isPasswordRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Run no_activity automations on mount
   useEffect(() => {
-    if (loading) return;
+    if (loading || loadError || isPasswordRecovery) return;
     const now = Date.now();
     const newTasks: Task[] = [];
     state.leads.forEach(lead => {
@@ -503,6 +534,7 @@ export default function App() {
   const getLabel = (key: string) => getL(key, state.labels);
 
   const NAV_TABS = [
+    { id: 'integrations', icon: '🔗', defaultLabel: 'חיבורים' },
     { id: 'home',     icon: '🏠', defaultLabel: 'ראשי'    },
     { id: 'leads',    icon: '👤', defaultLabel: 'לידים'   },
     { id: 'clients',  icon: '🎓', defaultLabel: 'קליטה'   },
@@ -519,18 +551,16 @@ export default function App() {
   const navUserId = viewAsId ?? state.currentUserId;
   const navUser   = state.users.find(u => u.id === navUserId);
 
-  const visibleTabs = [...state.navConfig]
+  const visibleTabs = [...state.navConfig, ...(state.navConfig.some(t=>t.id==='integrations') ? [] : [{id:'integrations',visible:true,order:99}])]
     .filter(t => t.visible)
     .sort((a, b) => a.order - b.order)
     .map(t => NAV_TABS.find(n => n.id === t.id))
     .filter((t): t is typeof NAV_TABS[0] => !!t)
-    // TEMP BYPASS — כל הלשוניות פתוחות לכולם עד שנתקן את התפקיד
-    .filter(() => {
-      void navUser;
-      return true;
-      // if (!navUser || navUser.role === 'admin') return true;
-      // if (!navUser.allowedTabs) return true;
-      // return navUser.allowedTabs.includes(t.id);
+    .filter(t => {
+      if (!navUser) return false;
+      if (navUser.role === 'admin') return true;
+      if (['settings', 'marketing', 'integrations'].includes(t.id)) return false;
+      return (navUser.allowedTabs ?? ['home','leads','clients','tasks','chat']).includes(t.id);
     });
 
   const unreadChat = state.chatMessages.filter(m =>
@@ -580,10 +610,23 @@ export default function App() {
   }
 
   // כשהמנהל צופה כמשתמש אחר — state מסונן לפי המשתמש הנצפה (לא לשמירה)
+  if (loadError) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-100" dir="rtl">
+      <div role="alert" className="bg-white rounded-2xl shadow p-8 max-w-md text-center space-y-4">
+        <h1 className="text-xl font-bold">לא הצלחנו לטעון את הנתונים</h1>
+        <p>השמירה נעצרה כדי להגן על המידע הקיים. אפשר לנסות לטעון מחדש.</p>
+        <button className="bg-blue-700 text-white rounded-lg px-4 py-2" onClick={() => window.location.reload()}>נסה שוב</button>
+      </div>
+    </div>;
+  }
+
   const effectiveState = viewAsId ? { ...state, currentUserId: viewAsId } : state;
 
   return (
     <div className="min-h-screen bg-gray-100 text-right" dir="rtl">
+      {saveError && <div role="alert" className="bg-red-100 text-red-900 p-4 sticky top-0 z-50">
+        השמירה נכשלה. השינויים האחרונים עדיין לא נשמרו. השאר את החלון פתוח ופנה למנהל המערכת.
+      </div>}
       {/* Sticky top wrapper: view-as banner + header */}
       <div className="sticky top-0 z-40">
         {viewAsId && (
@@ -635,6 +678,7 @@ export default function App() {
 
       {/* Main */}
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
+        {activeTab === 'integrations' && navUser?.role === 'admin' && <IntegrationsView />}
         {activeTab === 'home' && (
           <HomePage
             state={effectiveState}

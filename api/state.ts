@@ -9,6 +9,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateRequest } from './_lib/auth';
 import { supabaseAdmin }   from './_lib/supabaseAdmin';
+import { diffRows, type RecordRow } from '../src/state-diff';
 
 console.log('[CRM state.ts] module loaded — handler registered');
 
@@ -23,12 +24,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isAdmin = crmUser.role === 'admin';
     const uid     = crmUser.crm_user_id;
 
-    if (req.method === 'GET')  return handleGet(res, uid, isAdmin);
-    if (req.method === 'POST') return handlePost(req, res, uid, isAdmin);
+    if (req.method === 'GET')  return await handleGet(res, uid, isAdmin);
+    if (req.method === 'POST') return await handlePost(req, res, uid, isAdmin);
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     console.error('[CRM] UNHANDLED EXCEPTION in handler:', err);
-    return res.status(500).json({ error: 'Internal server error', details: String(err) });
+    return res.status(500).json({ error: 'Could not complete request' });
   }
 }
 
@@ -325,72 +326,41 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     return res.status(500).json({ error: 'Failed to load config' });
   }
 
-  // לידים — מסונן לנציג (FIX: capture .eq() return value)
-  const leadsQ = supabaseAdmin.from('leads').select('*');
-  const { data: rawLeads = [] } = await (isAdmin ? leadsQ : leadsQ.eq('assigned_to', uid));
-  const leads = (rawLeads ?? []).map(dbToLead);
-
-  // פעילויות — רק ללידים הנראים
+  type Query = ReturnType<ReturnType<typeof supabaseAdmin.from>['select']>;
+  const all = async (table: string, filter: (q: Query) => Query = q => q): Promise<Row[]> => {
+    const rows: Row[] = [];
+    for (let offset = 0; offset < 20000; offset += 500) {
+      let query = filter(supabaseAdmin.from(table).select('*'));
+      if (['leads','courses','lessons'].includes(table)) query = query.eq('archived', false);
+      const { data } = await query.order('id').range(offset, offset + 499).throwOnError();
+      rows.push(...data);
+      if (data.length < 500) return rows;
+    }
+    throw new Error('Dataset requires paginated view');
+  };
+  const rawLeads = await all('leads', q => isAdmin ? q : q.eq('assigned_to', uid));
+  const leads = rawLeads.map(dbToLead);
   const leadIds = leads.map(l => l.id as string);
-  const { data: activities = [] } = leadIds.length > 0
-    ? await supabaseAdmin.from('activities').select('*').in('lead_id', leadIds)
-    : { data: [] };
-
-  // משימות — מסונן לנציג (FIX: capture .eq() return value)
-  const tasksQ = supabaseAdmin.from('tasks').select('*');
-  const { data: tasks = [] } = await (isAdmin ? tasksQ : tasksQ.eq('assigned_to', uid));
-
-  // לקוחות — מסונן לנציג (FIX: capture .eq() return value)
-  const clientsQ = supabaseAdmin.from('clients').select('*');
-  const { data: rawClients = [] } = await (isAdmin
-    ? clientsQ
-    : clientsQ.in('lead_id', leadIds.length > 0 ? leadIds : ['__none__']));
-  const clients = (rawClients ?? []).map(dbToClient);
-
-  // הודעות צ'אט — broadcast + שלו
-  const { data: rawChat = [] } = await supabaseAdmin
-    .from('chat_messages')
-    .select('*')
-    .or(`to_user_id.is.null,from_user_id.eq.${uid},to_user_id.eq.${uid}`)
-    .order('timestamp', { ascending: true });
-  const chatMessages = (rawChat ?? []).map(dbToChat);
-
-  // פתקיות — רק שלו
-  const { data: rawNotes = [] } = await supabaseAdmin
-    .from('pinned_notes')
-    .select('*')
-    .eq('user_id', uid);
-  const pinnedNotes = (rawNotes ?? []).map(dbToNote);
-
-  // קורסים — כולם גלויים לכולם (תוכן הוראה משותף)
-  const { data: rawCourses = [] } = await supabaseAdmin
-    .from('courses').select('*').order('order', { ascending: true });
-  const courses = (rawCourses ?? []).map(dbToCourse);
-
-  // שיעורים
-  const courseIds = courses.map(c => c.id as string);
-  const { data: rawLessons = [] } = courseIds.length > 0
-    ? await supabaseAdmin.from('lessons').select('*').in('course_id', courseIds).order('order', { ascending: true })
-    : { data: [] };
-  const lessons = (rawLessons ?? []).map(dbToLesson);
-
-  // פריטי תוכן
-  const lessonIds = lessons.map(l => l.id as string);
-  const { data: rawContentItems = [] } = lessonIds.length > 0
-    ? await supabaseAdmin.from('content_items').select('*').in('lesson_id', lessonIds).order('order', { ascending: true })
-    : { data: [] };
-  const contentItems = (rawContentItems ?? []).map(dbToContentItem);
-
-  // מאגר ידע שיווקי
-  const { data: rawMktKnowledge = [] } = await supabaseAdmin
-    .from('marketing_knowledge').select('*').order('category', { ascending: true });
-  const marketingKnowledge = (rawMktKnowledge ?? []).map(dbToMarketingKnowledge);
-
-  // מסרים שיווקיים
-  const { data: rawMktMessages = [] } = await supabaseAdmin
-    .from('marketing_messages').select('*')
-    .order('week_date', { ascending: false });
-  const marketingMessages = (rawMktMessages ?? []).map(dbToMarketingMessage);
+  const [activities, tasks, rawClients, rawChat, rawNotes, rawCourses, rawMktKnowledge, rawMktMessages] = await Promise.all([
+    leadIds.length ? all('activities', q => q.in('lead_id',leadIds)) : [],
+    all('tasks', q => isAdmin ? q : q.eq('assigned_to',uid)),
+    isAdmin ? all('clients') : leadIds.length ? all('clients', q => q.in('lead_id',leadIds)) : [],
+    all('chat_messages', q => q.or(`to_user_id.is.null,from_user_id.eq.${uid},to_user_id.eq.${uid}`)),
+    all('pinned_notes', q => q.eq('user_id',uid)), all('courses'),
+    isAdmin ? all('marketing_knowledge') : [], isAdmin ? all('marketing_messages') : [],
+  ]);
+  const clients = rawClients.map(dbToClient);
+  const chatMessages = rawChat.map(dbToChat).sort((a,b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+  const pinnedNotes = rawNotes.map(dbToNote);
+  const courses = rawCourses.map(dbToCourse).sort((a,b) => a.order-b.order);
+  const courseIds = courses.map(c => c.id);
+  const rawLessons = courseIds.length ? await all('lessons', q => q.in('course_id',courseIds)) : [];
+  const lessons = rawLessons.map(dbToLesson).sort((a,b) => a.order-b.order);
+  const lessonIds = lessons.map(l => l.id);
+  const rawContentItems = lessonIds.length ? await all('content_items', q => q.in('lesson_id',lessonIds)) : [];
+  const contentItems = rawContentItems.map(dbToContentItem).sort((a,b) => a.order-b.order);
+  const marketingKnowledge = rawMktKnowledge.map(dbToMarketingKnowledge);
+  const marketingMessages = rawMktMessages.map(dbToMarketingMessage).sort((a,b) => String(b.weekDate).localeCompare(String(a.weekDate)));
 
   if (!config) {
     // הפעלה ראשונה — אין קונפיגורציה עדיין
@@ -400,7 +370,12 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
   console.log(`[CRM GET] ✓ returning: leads=${leads.length} tasks=${(tasks??[]).length} activities=${(activities??[]).length} clients=${clients.length} chat=${chatMessages.length} notes=${pinnedNotes.length}`);
   return res.status(200).json({
     // קונפיגורציה
-    users:             config.users              ?? [],
+    users:             (config.users ?? []).map((user: Row) => {
+      const safe = { ...user };
+      delete safe.password;
+      if (safe.id === uid) safe.role = isAdmin ? 'admin' : 'salesperson';
+      return safe;
+    }),
     statuses:          config.statuses           ?? [],
     products:          config.products           ?? [],
     dropdownOptions:   config.dropdown_options   ?? {},
@@ -435,312 +410,47 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
 // ════════════════════════════════════════════════════════════════════
 
 async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, isAdmin: boolean) {
-  const incoming = req.body;
-  if (!incoming || typeof incoming !== 'object') {
-    return res.status(400).json({ error: 'Invalid request body' });
+  const { before, after } = req.body ?? {};
+  if (!before || !after || typeof before !== 'object' || typeof after !== 'object') {
+    return res.status(400).json({ error: 'Reload the application before saving' });
   }
-
-  // ── ולידציית בעלות לנציגים ───────────────────────────────────────────────
-  if (!isAdmin) {
-    const illegalLead = (incoming.leads ?? []).find(
-      (l: Row) => l.assigned_to !== uid
-    );
-    if (illegalLead) {
-      return res.status(403).json({ error: 'Cannot modify leads assigned to others' });
+  const collections: [string, string, (row: Row) => Row][] = [
+    ['leads', 'leads', leadToDb], ['tasks', 'tasks', r => r],
+    ['activities', 'activities', r => r], ['clients', 'clients', clientToDb],
+    ['chatMessages', 'chat_messages', chatToDb], ['pinnedNotes', 'pinned_notes', noteToDb],
+    ['courses', 'courses', courseToDb], ['lessons', 'lessons', lessonToDb],
+    ['contentItems', 'content_items', contentItemToDb],
+    ['marketingKnowledge', 'marketing_knowledge', marketingKnowledgeToDb],
+    ['marketingMessages', 'marketing_messages', marketingMessageToDb],
+  ];
+  const changes = [];
+  for (const [key, table, convert] of collections) {
+    if (!Array.isArray(before[key]) || !Array.isArray(after[key])) {
+      return res.status(400).json({ error: 'Incomplete state; reload before saving' });
+    }
+    // Compare frontend rows first so defaults cannot create spurious writes.
+    for (const change of diffRows(table, before[key], after[key])) {
+      if (table === 'chat_messages' && !isAdmin && (change.after?.fromUserId ?? change.before?.fromUserId) !== uid) continue;
+      changes.push({ table,
+        before: change.before ? convert(change.before) : null,
+        after: change.after ? convert(change.after) : null });
     }
   }
-
-  console.log(`[CRM POST] uid=${uid} isAdmin=${isAdmin} | leads=${(incoming.leads??[]).length} tasks=${(incoming.tasks??[]).length} activities=${(incoming.activities??[]).length} clients=${(incoming.clients??[]).length} chat=${(incoming.chatMessages??[]).length} notes=${(incoming.pinnedNotes??[]).length}`);
-
-  // ── קונפיגורציה (admin בלבד) ──────────────────────────────────────────────
   if (isAdmin) {
-    const { error: cfgErr } = await supabaseAdmin.from('crm_config').upsert({
-      id:                  '00000000-0000-0000-0000-000000000001',
-      users:               incoming.users              ?? [],
-      statuses:            incoming.statuses           ?? [],
-      products:            incoming.products           ?? [],
-      dropdown_options:    incoming.dropdownOptions    ?? {},
-      custom_fields:       incoming.customFields       ?? [],
-      labels:              incoming.labels             ?? {},
-      nav_config:          incoming.navConfig          ?? [],
-      sales_targets:       incoming.salesTargets       ?? {},
-      automation_rules:    incoming.automationRules    ?? [],
-      table_column_prefs:  incoming.tableColumnPrefs   ?? {},
-      daily_summary_email: incoming.dailySummaryEmail  ?? '',
-      updated_at:          new Date().toISOString(),
+    const config = (s: Row): RecordRow => ({
+      id: '00000000-0000-0000-0000-000000000001',
+      users: s.users, statuses: s.statuses, products: s.products,
+      dropdown_options: s.dropdownOptions, custom_fields: s.customFields,
+      labels: s.labels, nav_config: s.navConfig, sales_targets: s.salesTargets,
+      automation_rules: s.automationRules, table_column_prefs: s.tableColumnPrefs,
+      daily_summary_email: s.dailySummaryEmail,
     });
-    if (cfgErr) console.error('[CRM] crm_config upsert ERROR:', cfgErr);
-    else console.log('[CRM] crm_config ✓ saved');
+    changes.push(...diffRows('crm_config', [config(before)], [config(after)]));
   }
-
-  // ── לידים: upsert + delete ────────────────────────────────────────────────
-  const leadsToSave: Row[] = isAdmin
-    ? incoming.leads ?? []
-    : (incoming.leads ?? []).filter((l: Row) => l.assigned_to === uid);
-
-  if (leadsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('leads')
-      .upsert(leadsToSave.map(leadToDb));
-    if (error) console.error('[CRM] leads upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] leads ✓ upserted ${leadsToSave.length} rows`);
-  } else {
-    console.log('[CRM] leads — nothing to upsert');
+  const { error } = await supabaseAdmin.rpc('crm_apply_changes', {actor: uid, changes});
+  if (error) {
+    const status = error.code === '40001' ? 409 : error.code === '42501' ? 403 : error.code === '22023' ? 400 : 500;
+    return res.status(status).json({ error: status === 409 ? 'Record changed; reload before saving' : 'Changes were not saved' });
   }
-
-  // מחיקת לידים שנמחקו
-  const existingLeadsQ = supabaseAdmin.from('leads').select('id');
-  const { data: existingLeads = [], error: elErr } = await (isAdmin
-    ? existingLeadsQ
-    : existingLeadsQ.eq('assigned_to', uid));
-  if (elErr) console.error('[CRM] leads select ERROR:', elErr);
-  const incomingLeadIds = new Set((incoming.leads ?? []).map((l: Row) => l.id));
-  const leadsToDelete = (existingLeads ?? [])
-    .filter((l: Row) => !incomingLeadIds.has(l.id))
-    .map((l: Row) => l.id);
-  if (leadsToDelete.length > 0) {
-    const { error: delErr } = await supabaseAdmin.from('leads').delete().in('id', leadsToDelete);
-    if (delErr) console.error('[CRM] leads delete ERROR:', delErr);
-    else console.log(`[CRM] leads ✓ deleted ${leadsToDelete.length} rows`);
-  }
-
-  // ── פעילויות: upsert + delete ─────────────────────────────────────────────
-  const myLeadIds = new Set(leadsToSave.map(l => l.id));
-
-  const activitiesToSave = (incoming.activities ?? []).filter(
-    (a: Row) => myLeadIds.has(a.lead_id)
-  );
-  if (activitiesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('activities')
-      .upsert(activitiesToSave);
-    if (error) console.error('[CRM] activities upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] activities ✓ upserted ${activitiesToSave.length} rows`);
-  } else {
-    console.log('[CRM] activities — nothing to upsert');
-  }
-
-  // מחיקת פעילויות שנמחקו
-  if (myLeadIds.size > 0) {
-    const { data: existingActs = [] } = await supabaseAdmin
-      .from('activities').select('id').in('lead_id', [...myLeadIds]);
-    const incomingActIds = new Set((incoming.activities ?? []).map((a: Row) => a.id));
-    const actsToDelete = (existingActs ?? [])
-      .filter((a: Row) => !incomingActIds.has(a.id))
-      .map((a: Row) => a.id);
-    if (actsToDelete.length > 0) {
-      const { error } = await supabaseAdmin.from('activities').delete().in('id', actsToDelete);
-      if (error) console.error('[CRM] activities delete ERROR:', error);
-      else console.log(`[CRM] activities ✓ deleted ${actsToDelete.length} rows`);
-    }
-  }
-
-  // ── משימות: upsert + delete ───────────────────────────────────────────────
-  const tasksToSave: Row[] = isAdmin
-    ? incoming.tasks ?? []
-    : (incoming.tasks ?? []).filter((t: Row) => t.assigned_to === uid);
-
-  if (tasksToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('tasks')
-      .upsert(tasksToSave);
-    if (error) console.error('[CRM] tasks upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] tasks ✓ upserted ${tasksToSave.length} rows`);
-  } else {
-    console.log('[CRM] tasks — nothing to upsert');
-  }
-
-  // מחיקת משימות שנמחקו
-  const existingTasksQ = supabaseAdmin.from('tasks').select('id');
-  const { data: existingTasks = [], error: etErr } = await (isAdmin
-    ? existingTasksQ
-    : existingTasksQ.eq('assigned_to', uid));
-  if (etErr) console.error('[CRM] tasks select ERROR:', etErr);
-  const incomingTaskIds = new Set((incoming.tasks ?? []).map((t: Row) => t.id));
-  const tasksToDelete = (existingTasks ?? [])
-    .filter((t: Row) => !incomingTaskIds.has(t.id))
-    .map((t: Row) => t.id);
-  if (tasksToDelete.length > 0) {
-    const { error: delErr } = await supabaseAdmin.from('tasks').delete().in('id', tasksToDelete);
-    if (delErr) console.error('[CRM] tasks delete ERROR:', delErr);
-    else console.log(`[CRM] tasks ✓ deleted ${tasksToDelete.length} rows`);
-  }
-
-  // ── לקוחות: upsert ────────────────────────────────────────────────────────
-  const clientsToSave = (incoming.clients ?? []).filter(
-    (c: Row) => isAdmin || myLeadIds.has(c.leadId)
-  );
-  if (clientsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('clients')
-      .upsert(clientsToSave.map(clientToDb));
-    if (error) console.error('[CRM] clients upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] clients ✓ upserted ${clientsToSave.length} rows`);
-  } else {
-    console.log('[CRM] clients — nothing to upsert');
-  }
-
-  // ── הודעות צ'אט: upsert ───────────────────────────────────────────────────
-  const chatToSave = (incoming.chatMessages ?? []).filter(
-    (m: Row) => isAdmin || m.fromUserId === uid
-  );
-  if (chatToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('chat_messages')
-      .upsert(chatToSave.map(chatToDb));
-    if (error) console.error('[CRM] chat_messages upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] chat_messages ✓ upserted ${chatToSave.length} rows`);
-  } else {
-    console.log('[CRM] chat_messages — nothing to upsert');
-  }
-
-  // ── פתקיות: upsert + delete ───────────────────────────────────────────────
-  const notesToSave = (incoming.pinnedNotes ?? []).filter(
-    (n: Row) => isAdmin || n.userId === uid
-  );
-  if (notesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('pinned_notes')
-      .upsert(notesToSave.map(noteToDb));
-    if (error) console.error('[CRM] pinned_notes upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] pinned_notes ✓ upserted ${notesToSave.length} rows`);
-  } else {
-    console.log('[CRM] pinned_notes — nothing to upsert');
-  }
-
-  // מחיקת פתקיות שנמחקו (רק שלי)
-  const { data: existingNotes = [] } = await supabaseAdmin
-    .from('pinned_notes').select('id').eq('user_id', uid);
-  const incomingNoteIds = new Set(
-    (incoming.pinnedNotes ?? [])
-      .filter((n: Row) => isAdmin || n.userId === uid)
-      .map((n: Row) => n.id)
-  );
-  const notesToDelete = (existingNotes ?? [])
-    .filter((n: Row) => !incomingNoteIds.has(n.id))
-    .map((n: Row) => n.id);
-  if (notesToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('pinned_notes').delete().in('id', notesToDelete);
-    if (error) console.error('[CRM] pinned_notes delete ERROR:', error);
-    else console.log(`[CRM] pinned_notes ✓ deleted ${notesToDelete.length} rows`);
-  }
-
-  // ── קורסים: upsert + delete ───────────────────────────────────────────────
-  const coursesToSave: Row[] = incoming.courses ?? [];
-  if (coursesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('courses')
-      .upsert(coursesToSave.map(courseToDb));
-    if (error) console.error('[CRM] courses upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] courses ✓ upserted ${coursesToSave.length} rows`);
-  }
-  // מחיקת קורסים שנמחקו
-  const { data: existingCourses = [] } = await supabaseAdmin.from('courses').select('id');
-  const incomingCourseIds = new Set((incoming.courses ?? []).map((c: Row) => c.id));
-  const coursesToDelete = (existingCourses ?? [])
-    .filter((c: Row) => !incomingCourseIds.has(c.id))
-    .map((c: Row) => c.id);
-  if (coursesToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('courses').delete().in('id', coursesToDelete);
-    if (error) console.error('[CRM] courses delete ERROR:', error);
-    else console.log(`[CRM] courses ✓ deleted ${coursesToDelete.length} rows`);
-  }
-
-  // ── שיעורים: upsert + delete ──────────────────────────────────────────────
-  const lessonsToSave: Row[] = incoming.lessons ?? [];
-  if (lessonsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('lessons')
-      .upsert(lessonsToSave.map(lessonToDb));
-    if (error) console.error('[CRM] lessons upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] lessons ✓ upserted ${lessonsToSave.length} rows`);
-  }
-  const { data: existingLessons = [] } = await supabaseAdmin.from('lessons').select('id');
-  const incomingLessonIds = new Set((incoming.lessons ?? []).map((l: Row) => l.id));
-  const lessonsToDelete = (existingLessons ?? [])
-    .filter((l: Row) => !incomingLessonIds.has(l.id))
-    .map((l: Row) => l.id);
-  if (lessonsToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('lessons').delete().in('id', lessonsToDelete);
-    if (error) console.error('[CRM] lessons delete ERROR:', error);
-    else console.log(`[CRM] lessons ✓ deleted ${lessonsToDelete.length} rows`);
-  }
-
-  // ── פריטי תוכן: upsert + delete ──────────────────────────────────────────
-  const contentItemsToSave: Row[] = incoming.contentItems ?? [];
-  if (contentItemsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('content_items')
-      .upsert(contentItemsToSave.map(contentItemToDb));
-    if (error) console.error('[CRM] content_items upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] content_items ✓ upserted ${contentItemsToSave.length} rows`);
-  }
-  const { data: existingContent = [] } = await supabaseAdmin.from('content_items').select('id');
-  const incomingContentIds = new Set((incoming.contentItems ?? []).map((ci: Row) => ci.id));
-  const contentToDelete = (existingContent ?? [])
-    .filter((ci: Row) => !incomingContentIds.has(ci.id))
-    .map((ci: Row) => ci.id);
-  if (contentToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('content_items').delete().in('id', contentToDelete);
-    if (error) console.error('[CRM] content_items delete ERROR:', error);
-    else console.log(`[CRM] content_items ✓ deleted ${contentToDelete.length} rows`);
-  }
-
-  // ── מאגר ידע שיווקי: upsert + delete ────────────────────────────────────────
-  const knowledgeToSave: Row[] = incoming.marketingKnowledge ?? [];
-  if (knowledgeToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('marketing_knowledge')
-      .upsert(knowledgeToSave.map(marketingKnowledgeToDb));
-    if (error) console.error('[CRM] marketing_knowledge upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] marketing_knowledge ✓ upserted ${knowledgeToSave.length} rows`);
-  }
-  const { data: existingKnowledge = [] } = await supabaseAdmin.from('marketing_knowledge').select('id');
-  const incomingKnowledgeIds = new Set((incoming.marketingKnowledge ?? []).map((k: Row) => k.id));
-  const knowledgeToDelete = (existingKnowledge ?? [])
-    .filter((k: Row) => !incomingKnowledgeIds.has(k.id))
-    .map((k: Row) => k.id);
-  if (knowledgeToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('marketing_knowledge').delete().in('id', knowledgeToDelete);
-    if (error) console.error('[CRM] marketing_knowledge delete ERROR:', error);
-    else console.log(`[CRM] marketing_knowledge ✓ deleted ${knowledgeToDelete.length} rows`);
-  }
-
-  // ── מסרים שיווקיים: upsert + delete (week-scoped) ───────────────────────────
-  // מחיקה מפורשת של שבועות שנמחקו ע"י המשתמש
-  const deletedWeeks: string[] = incoming.marketingDeletedWeeks ?? [];
-  if (deletedWeeks.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('marketing_messages').delete().in('week_date', deletedWeeks);
-    if (error) console.error('[CRM] marketing_messages explicit-delete ERROR:', error);
-    else console.log(`[CRM] marketing_messages ✓ deleted weeks: ${deletedWeeks.join(', ')}`);
-  }
-
-  const messagesToSave: Row[] = incoming.marketingMessages ?? [];
-  if (messagesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('marketing_messages')
-      .upsert(messagesToSave.map(marketingMessageToDb));
-    if (error) console.error('[CRM] marketing_messages upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] marketing_messages ✓ upserted ${messagesToSave.length} rows`);
-  }
-
-  // מחיקה רק בתוך שבועות שמיוצגים ב-incoming — לא לנגוע בשבועות שנכתבו ע"י crm_sync.py
-  const incomingWeeks = [...new Set((messagesToSave).map((m: Row) => m.weekDate))];
-  if (incomingWeeks.length > 0) {
-    const { data: existingInWeeks = [] } = await supabaseAdmin
-      .from('marketing_messages').select('id').in('week_date', incomingWeeks);
-    const incomingMessageIds = new Set(messagesToSave.map((m: Row) => m.id));
-    const messagesToDelete = (existingInWeeks ?? [])
-      .filter((m: Row) => !incomingMessageIds.has(m.id))
-      .map((m: Row) => m.id);
-    if (messagesToDelete.length > 0) {
-      const { error } = await supabaseAdmin.from('marketing_messages').delete().in('id', messagesToDelete);
-      if (error) console.error('[CRM] marketing_messages delete ERROR:', error);
-      else console.log(`[CRM] marketing_messages ✓ deleted ${messagesToDelete.length} stale rows`);
-    }
-  }
-
-  console.log('[CRM POST] ✓ done');
-  return res.status(200).json({ saved: true });
+  return res.status(200).json({saved: true});
 }

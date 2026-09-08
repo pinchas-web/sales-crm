@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "build:plugin": "tsc -b && vite build && xcopy /E /I /Y dist ..\\sales-crm\\dist && powershell -Command \"Compress-Archive -Path ..\\sales-crm -DestinationPath ..\\sales-crm.zip -Force\"",
     "lint": "eslint .",
+    "test": "node --test tests/*.test.mjs",
     "preview": "vite preview",
     "slides:convert": "node scripts/powerpoint-conversion-worker.mjs --once",
     "slides:watch": "node scripts/powerpoint-conversion-worker.mjs"
@@ -18,7 +19,7 @@
     "@supabase/supabase-js": "^2.99.1",
     "chart.js": "^4.5.1",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "^5.6.205",
+    "pdfjs-dist": "^6.3.289",
     "pptxviewjs": "^1.1.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -26,6 +27,7 @@
     "recharts": "^3.7.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
