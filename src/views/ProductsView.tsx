@@ -1,15 +1,22 @@
 /**
  * ניהול קטלוג מוצרים — גלריית כרטיסים, עריכה מלאה, נהלי קליטה והמלצות.
  * נהלי הקליטה שמוגדרים כאן מופיעים אוטומטית בכרטיס הלקוח אחרי סגירה.
+ * V2: לכל מוצר ניתן להגדיר Product Operations Plan מלא כהכנה ל-Customer Success.
  */
 import { useState } from 'react';
 import type { AppState, Product, ProductTestimonial, OnboardingStep } from '../types';
 import { uid } from '../utils';
 import { Btn, Input, Modal, Textarea, EmptyState, Toggle, ConfirmDialog } from '../ui';
+import ProductOperationsEditor, { createEmptyProductOperationsPlan } from './products/ProductOperationsEditor';
 
 // ─── Product Card ─────────────────────────────────────────────────────────────
 
 function ProductCard({ product, onClick }: { product: Product; onClick: () => void }) {
+  const operationsCount =
+    (product.operationsPlan?.lifecycleSteps.length ?? 0) +
+    (product.operationsPlan?.touchpoints.length ?? 0) +
+    (product.operationsPlan?.riskRules.length ?? 0);
+
   return (
     <div onClick={onClick}
       className={`bg-white rounded-2xl border shadow-sm cursor-pointer hover:shadow-md transition-all overflow-hidden group ${!product.active ? 'opacity-60' : ''}`}>
@@ -34,9 +41,10 @@ function ProductCard({ product, onClick }: { product: Product; onClick: () => vo
           <span className="text-lg font-bold text-blue-700">₪{product.price.toLocaleString('he-IL')}</span>
           <span className="text-xs text-gray-400">{product.category}</span>
         </div>
-        <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
+        <div className="mt-2 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
           <span>📋 {product.onboardingSteps.length} שלבי קליטה</span>
           <span>⭐ {product.testimonials.length} ממליצים</span>
+          {operationsCount > 0 && <span className="text-purple-600">🧭 {operationsCount} כללי הפעלה</span>}
         </div>
       </div>
     </div>
@@ -144,24 +152,28 @@ function TestimonialsEditor({ items, onChange }: {
 
 // ─── Product Detail Modal ─────────────────────────────────────────────────────
 
-function ProductDetailModal({ product, onClose, onSave, onDelete }: {
-  product: Product | null; onClose: () => void;
-  onSave: (p: Product) => void; onDelete: (id: string) => void;
+function ProductDetailModal({ product, products, onClose, onSave, onDelete }: {
+  product: Product | null;
+  products: Product[];
+  onClose: () => void;
+  onSave: (p: Product) => void;
+  onDelete: (id: string) => void;
 }) {
   const isNew = !product;
   const blank = (): Product => ({
     id: uid(), name: '', shortDescription: '', description: '', price: 0, category: '',
-    testimonials: [], onboardingSteps: [], active: true,
+    testimonials: [], onboardingSteps: [], operationsPlan: createEmptyProductOperationsPlan(), active: true,
     createdAt: new Date().toISOString(),
   });
-  const [form, setForm]           = useState<Product>(product ?? blank());
-  const [tab, setTab]             = useState<'details' | 'syllabus' | 'steps' | 'testimonials'>('details');
-  const [confirmDelete, setDel]   = useState(false);
+  const [form, setForm] = useState<Product>(product ?? blank());
+  const [tab, setTab] = useState<'details' | 'syllabus' | 'steps' | 'operations' | 'testimonials'>('details');
+  const [confirmDelete, setDel] = useState(false);
 
   const TABS = [
     { id: 'details',      label: 'פרטים'       },
     { id: 'syllabus',     label: 'סילבוס'      },
     { id: 'steps',        label: 'קליטה'       },
+    { id: 'operations',   label: '🧭 ניהול פנימי' },
     { id: 'testimonials', label: 'ממליצים'     },
   ] as const;
 
@@ -178,7 +190,7 @@ function ProductDetailModal({ product, onClose, onSave, onDelete }: {
   return (
     <Modal open={open} onClose={onClose} title={isNew ? 'מוצר חדש' : form.name} wide>
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 border-b pb-3">
+      <div className="flex gap-1 mb-5 border-b pb-3 flex-wrap">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${tab === t.id ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
@@ -227,16 +239,28 @@ function ProductDetailModal({ product, onClose, onSave, onDelete }: {
 
       {tab === 'steps' && (
         <div>
-          <p className="text-sm text-gray-500 mb-3">שלבי קליטת הלקוח — יופיעו בטבלת "קליטת לקוח"</p>
+          <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 mb-3">
+            <p className="text-sm font-medium text-blue-800">שלבי הקליטה הקיימים</p>
+            <p className="text-xs text-blue-600 mt-0.5">אלה השלבים שקורים מיד אחרי הסגירה. את ניהול כל חיי הלקוח מגדירים בלשונית "ניהול פנימי".</p>
+          </div>
           <StepsEditor steps={form.onboardingSteps} onChange={steps => setForm(f => ({ ...f, onboardingSteps: steps }))} />
         </div>
+      )}
+
+      {tab === 'operations' && (
+        <ProductOperationsEditor
+          productId={form.id}
+          plan={form.operationsPlan}
+          products={products}
+          onChange={operationsPlan => setForm(f => ({ ...f, operationsPlan }))}
+        />
       )}
 
       {tab === 'testimonials' && (
         <TestimonialsEditor items={form.testimonials} onChange={items => setForm(f => ({ ...f, testimonials: items }))} />
       )}
 
-      <div className="flex justify-between items-center mt-6 pt-4 border-t">
+      <div className="flex justify-between items-center mt-6 pt-4 border-t sticky bottom-0 bg-white">
         <div>
           {!isNew && <Btn variant="danger" size="sm" onClick={() => setDel(true)}>🗑 מחק מוצר</Btn>}
         </div>
@@ -271,7 +295,10 @@ export default function ProductsView({
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-bold text-gray-800">📦 מוצרים</h1>
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">📦 מוצרים</h1>
+          <p className="text-xs text-gray-500 mt-1">כל מוצר מחזיק גם את תבנית ההפעלה הפנימית שלו — קליטה, אספקה, שימור, הצלחה וסיום.</p>
+        </div>
         {canEdit && <Btn onClick={() => setSelected('new')}>+ מוצר חדש</Btn>}
       </div>
 
@@ -296,6 +323,7 @@ export default function ProductsView({
       {showModal && (
         <ProductDetailModal
           product={modalProduct}
+          products={state.products}
           onClose={() => setSelected(null)}
           onSave={onSaveProduct}
           onDelete={onDeleteProduct}
