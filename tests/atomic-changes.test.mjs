@@ -30,6 +30,10 @@ test('atomic changes preserve concurrent data and enforce persisted ownership', 
     ]), /Forbidden/);
     assert.equal((await db.query("select * from tasks where id='rollback'")).rows.length,0);
     await assert.rejects(apply('admin',[{table:'crm_users',before:null,after:{id:'hack'}}]), /Invalid table/);
+    await db.exec("insert into activities(id,lead_id,note) values ('new-child','a','Added concurrently')");
+    await apply('sales',[{table:'leads',before:{id:'a',name:'Edited',assigned_to:'sales'},after:null}]);
+    assert.equal((await db.query("select archived from leads where id='a'")).rows[0].archived,true);
+    assert.equal((await db.query("select * from activities where id='new-child'")).rows.length,1);
     const rls = await db.query("select relrowsecurity from pg_class where oid='public.leads'::regclass");
     assert.equal(rls.rows[0].relrowsecurity,true);
     await db.exec('set role anon');
