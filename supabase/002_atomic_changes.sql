@@ -10,6 +10,7 @@ do $$ declare t text; begin
     'chat_messages','pinned_notes','courses','lessons','content_items','marketing_knowledge','marketing_messages'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from anon, authenticated', t);
+    execute format('grant all on table public.%I to service_role', t);
   end loop;
 end $$;
 

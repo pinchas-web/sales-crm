@@ -199,7 +199,7 @@ export default function App() {
 
   // ── CRM state ─────────────────────────────────────────────────────────────
   const [state, setState]                     = useState<AppState>(SEED_STATE);
-  const [activeTab, setActiveTab]             = useState('home');
+  const [activeTab, setActiveTab]             = useState(new URLSearchParams(window.location.search).get('integration') === 'google' ? 'integrations' : 'home');
   const [pendingOnboarding, setPendingOnboarding] = useState<Lead | null>(null);
   const [loading, setLoading]                 = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -563,6 +563,8 @@ export default function App() {
       return (navUser.allowedTabs ?? ['home','leads','clients','tasks','chat']).includes(t.id);
     });
 
+  const renderedTab = visibleTabs.some(t => t.id === activeTab) ? activeTab : visibleTabs[0]?.id;
+
   const unreadChat = state.chatMessages.filter(m =>
     m.fromUserId !== state.currentUserId && !m.readBy.includes(state.currentUserId)
   ).length;
@@ -626,6 +628,11 @@ export default function App() {
     <div className="min-h-screen bg-gray-100 text-right" dir="rtl">
       {saveError && <div role="alert" className="bg-red-100 text-red-900 p-4 sticky top-0 z-50">
         השמירה נכשלה. השינויים האחרונים עדיין לא נשמרו. השאר את החלון פתוח ופנה למנהל המערכת.
+        <button className="border border-red-700 rounded-lg px-3 py-1 mr-3" onClick={() => {
+          const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));
+          const link=document.createElement('a');link.href=url;link.download='crm-unsaved-changes.json';link.click();
+          window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+        }}>הורד עותק של השינויים למחשב</button>
       </div>}
       {/* Sticky top wrapper: view-as banner + header */}
       <div className="sticky top-0 z-40">
@@ -651,7 +658,7 @@ export default function App() {
           </h1>
           <nav className="flex-1 flex items-center gap-0.5 overflow-x-auto">
             {visibleTabs.map(tab => {
-              const isActive = activeTab === tab.id;
+              const isActive = renderedTab === tab.id;
               const label = getLabel(`tab.${tab.id}`) || tab.defaultLabel;
               const badge =
                 tab.id === 'chat'  ? unreadChat   :
@@ -677,9 +684,9 @@ export default function App() {
       </div>{/* end sticky top wrapper */}
 
       {/* Main */}
-      <main className="max-w-screen-2xl mx-auto px-4 py-6">
-        {activeTab === 'integrations' && navUser?.role === 'admin' && <IntegrationsView />}
-        {activeTab === 'home' && (
+      <main inert={!!viewAsId || saveError} className="max-w-screen-2xl mx-auto px-4 py-6">
+        {renderedTab === 'integrations' && navUser?.role === 'admin' && <IntegrationsView />}
+        {renderedTab === 'home' && (
           <HomePage
             state={effectiveState}
             onNavigate={setActiveTab}
@@ -690,7 +697,7 @@ export default function App() {
             onUpdateNote={handleUpdateNote}
           />
         )}
-        {activeTab === 'leads' && (
+        {renderedTab === 'leads' && (
           <LeadsView
             state={effectiveState}
             onAddLead={handleAddLead}
@@ -706,13 +713,13 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
           />
         )}
-        {activeTab === 'clients' && (
+        {renderedTab === 'clients' && (
           <ClientsView state={effectiveState} onSaveClient={handleSaveClient} />
         )}
-        {activeTab === 'products' && (
+        {renderedTab === 'products' && (
           <ProductsView state={effectiveState} onSaveProduct={handleSaveProduct} onDeleteProduct={handleDeleteProduct} />
         )}
-        {activeTab === 'tasks' && (
+        {renderedTab === 'tasks' && (
           <TasksView
             state={effectiveState}
             onAddTask={handleAddTask}
@@ -720,9 +727,9 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
           />
         )}
-        {activeTab === 'data'     && <DataView      state={effectiveState} />}
-        {activeTab === 'chat'     && <ChatView      state={effectiveState} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
-        {activeTab === 'courses'  && (
+        {renderedTab === 'data'     && <DataView      state={effectiveState} />}
+        {renderedTab === 'chat'     && <ChatView      state={effectiveState} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
+        {renderedTab === 'courses'  && (
           <Suspense fallback={
             <div className="flex items-center justify-center h-64 text-indigo-600">
               <span className="animate-pulse text-4xl">📚</span>
@@ -742,8 +749,8 @@ export default function App() {
             />
           </Suspense>
         )}
-        {activeTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
-        {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
+        {renderedTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
+        {renderedTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>
 
       {/* Client onboarding popup */}
