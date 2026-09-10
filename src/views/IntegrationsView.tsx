@@ -13,7 +13,7 @@ type GoogleStatus = {configured:boolean;authorized:boolean;calendarId:string|nul
     return response.json();
   }
 
-export default function IntegrationsView() {
+export default function IntegrationsView({onCatalogSync}: {onCatalogSync: <T>(operation: () => Promise<T>) => Promise<T>}) {
   const [status,setStatus] = useState<Status | null>(null);
   const [busy,setBusy] = useState(false);
   const [message,setMessage] = useState('');
@@ -24,9 +24,9 @@ export default function IntegrationsView() {
     const {data:{session}} = await supabase.auth.getSession();
     const response = await fetch('/api/integrations', {
       method, headers:{Authorization:`Bearer ${session?.access_token ?? ''}`,'Content-Type':'application/json'},
-      ...(method === 'POST' ? {body:JSON.stringify({action:'sync-wordpress'})} : {}),
+      ...(method === 'POST' ? {body:JSON.stringify({action:'sync-products'})} : {}),
     });
-    if (!response.ok) throw new Error('הפעולה לא הושלמה. יש לבדוק את הגדרת החיבור בשרת.');
+    if (!response.ok) throw new Error(response.status === 409 ? 'הקטלוג השתנה במקביל או שהחיבור טרם הוגדר. רענן את הנתונים ובדוק את החיבור.' : 'הסנכרון לא הושלם. יש לבדוק את הגדרת החיבור בשרת.');
     return response.json();
   }
   useEffect(() => {
@@ -48,13 +48,13 @@ export default function IntegrationsView() {
   async function sync() {
     setBusy(true);setMessage('');
     try {
-      const result = await request('POST');
-      setStatus(await request());
-      setMessage(`הייבוא הושלם: ${result.products} מוצרים ו־${result.orders} הזמנות.`);
-    } catch { setMessage('הייבוא נכשל. נתוני הייבוא הקודם נשמרו.'); }
+      const result = await onCatalogSync(() => request('POST'));
+      setMessage(`הקטלוג סונכרן: ${result.created} מוצרים חדשים, ${result.updated} עודכנו ו־${result.missing} מוצרים חסרים בחנות סומנו כלא פעילים. המוצרים זמינים ברשימת המוצרים.${result.historySaved ? '' : ' רישום מועד הסנכרון נכשל, אך המוצרים נשמרו.'}`);
+      try { setStatus(await request()); } catch { /* Catalog commit already succeeded. */ }
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'הסנכרון לא הושלם.'); }
     finally {setBusy(false)}
   }
-  const woo=status?.snapshots.find(s=>s.provider==='woocommerce');
+  const woo=status?.snapshots.find(s=>s.provider==='woocommerce-products');
   return <section className="max-w-5xl mx-auto p-6 space-y-6" dir="rtl">
     <div><h1 className="text-3xl font-bold text-slate-900">החיבורים של העסק</h1><p className="text-slate-600 mt-2">מקורות המידע, מצב החיבור והייבוא האחרון במקום אחד.</p></div>
     {message && <p role="status" className="rounded-xl bg-blue-50 border border-blue-200 p-4">{message}</p>}
@@ -73,9 +73,10 @@ export default function IntegrationsView() {
       </article>
       <article className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex justify-between items-center"><h2 className="text-xl font-bold">WooCommerce</h2><span className="text-sm rounded-full bg-slate-100 px-3 py-1">{woo?'בוצע ייבוא':status?.wordpressConfigured?'מוכן לבדיקת חיבור':'ממתין להגדרה'}</span></div>
-        <p className="text-slate-600">מוצרים והזמנות מהאתר של העסק. הייבוא קורא מידע מהאתר ושומר עותק במערכת.</p>
+        <p className="text-slate-600">כל מוצר בחנות נוסף לרשימת המוצרים במערכת. סנכרון חוזר מעדכן שם, מחיר, תיאור ותמונה ושומר את שלבי הקליטה והמידע הפנימי.</p>
+        <p className="text-sm text-slate-500">מוצרים שלא פורסמו או הוסרו מהחנות מסומנים כלא פעילים. הסנכרון מופעל בלחיצה.</p>
         {woo && <p className="text-sm text-slate-500">{woo.record_count} רשומות · עדכון אחרון: {new Date(woo.synced_at).toLocaleString('he-IL')}</p>}
-        <button disabled={busy||!status?.wordpressConfigured} onClick={sync} className="bg-teal-700 hover:bg-teal-800 text-white rounded-xl px-5 py-3 disabled:opacity-40">{busy?'מייבא…':'ייבא עכשיו'}</button>
+        <button disabled={busy||!status?.wordpressConfigured} onClick={sync} className="bg-teal-700 hover:bg-teal-800 text-white rounded-xl px-5 py-3 disabled:opacity-40">{busy?'מסנכרן…':'סנכרן מוצרים'}</button>
       </article>
       {[
         ['Google Sheets','סנכרון דו־כיווני עדיין לא הופעל. נדרשים מיפוי עמודות וכללים לטיפול בשינויים משני הצדדים.'],

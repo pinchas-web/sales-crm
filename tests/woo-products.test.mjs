@@ -1,0 +1,30 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {transform} from 'esbuild';
+const {code} = await transform(await readFile('api/_lib/woo-products.ts','utf8'),{loader:'ts',format:'esm'});
+const {mergeWooProducts} = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const row = {id:42,name:'Course',status:'publish',price:'123.50',description:'<p>Text</p><script>bad()</script>',images:[{src:'https://example.com/image.jpg'}]};
+test('Woo catalog sync is idempotent and preserves CRM-only information and references',()=>{
+  const first=mergeWooProducts([], [row], '2026-09-10T00:00:00Z');
+  assert.equal(first.created,1); assert.equal(first.products[0].price,123.5);
+  assert.equal(first.products[0].description,'Text');
+  const local={...first.products[0],onboardingSteps:[{id:'step',title:'Call',order:0}],contractText:'Keep'};
+  const repeat=mergeWooProducts([local],[row],'2026-09-11T00:00:00Z');
+  assert.deepEqual(repeat.products,[local]); assert.equal(repeat.created,0); assert.equal(repeat.updated,0);
+  const update=mergeWooProducts([local],[{...row,name:'New',price:'0',status:'draft'}],'later');
+  assert.equal(update.products[0].id,local.id);assert.equal(update.products[0].contractText,'Keep');
+  assert.equal(update.products[0].active,false);assert.equal(update.updated,1);
+  const manual={...local,id:'manual',wooCommerceId:undefined};
+  const absent=mergeWooProducts([local,manual],[],'later');
+  assert.equal(absent.products.length,2);assert.equal(absent.products[0].active,false);
+  assert.equal(absent.products[1],manual); assert.equal(absent.missing,1);
+  const returned=mergeWooProducts(absent.products,[row],'later');
+  assert.equal(returned.products.length,2);assert.equal(returned.products[1].active,true);
+});
+test('Malformed catalog snapshots cannot partially replace the catalog',()=>{
+  assert.throws(()=>mergeWooProducts([],[row,row],'now'),/ID/);
+  assert.throws(()=>mergeWooProducts([],[{...row,price:'NaN'}],'now'),/price/);
+  assert.throws(()=>mergeWooProducts([],[{...row,id:null}],'now'),/ID/);
+  assert.equal(mergeWooProducts([],[{...row,images:[{src:'javascript:bad()'}]}],'now').products[0].imageDataUrl,undefined);
+});

@@ -108,6 +108,12 @@ export interface OnboardingStep {
 
 export interface Product {
   id: string;
+  wooCommerceId?: number;
+  sourceUrl?: string;
+  sku?: string;
+  sourceStatus?: string;
+  sourceType?: string;
+  sourceMissing?: boolean;
   name: string;
   shortDescription: string;
   description: string;

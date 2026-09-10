@@ -207,6 +207,8 @@ export default function App() {
   const loadedState = useRef<AppState | null>(null);
   const saveQueue = useRef(Promise.resolve());
   const saveBlocked = useRef(false);
+  const catalogSyncLock = useRef(false);
+  const [catalogSyncing, setCatalogSyncing] = useState(false);
   const [viewAsId, setViewAsId]               = useState<string | null>(null);
 
   // טעינה ראשונית מ-API (רק כשיש session)
@@ -252,11 +254,11 @@ export default function App() {
 
   // שמירה אוטומטית בכל שינוי state (או כשהטעינה מסתיימת)
   useEffect(() => {
-    if (loading || loadError || saveError || !session || isPasswordRecovery || state === loadedState.current) return;
+    if (loading || loadError || saveError || catalogSyncing || !session || isPasswordRecovery || state === loadedState.current) return;
     const owner = session.user.id;
     const timer = window.setTimeout(() => {
       saveQueue.current = saveQueue.current.then(async () => {
-        if (saveBlocked.current) return;
+        if (saveBlocked.current || catalogSyncLock.current) return;
         const { data: { session: current } } = await supabase.auth.getSession();
         if (current?.user.id !== owner) return;
         await apiSaveState(state, loadedState.current);
@@ -268,7 +270,46 @@ export default function App() {
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [state, loading, loadError, saveError, session?.user.id, isPasswordRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state, loading, loadError, saveError, catalogSyncing, session?.user.id, isPasswordRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function syncCatalog<T>(operation: () => Promise<T>): Promise<T> {
+    if (catalogSyncLock.current || saveBlocked.current || !session) throw new Error('יש להשלים שמירה לפני הסנכרון.');
+    catalogSyncLock.current = true;
+    setCatalogSyncing(true);
+    let baselineSafe = false;
+    try {
+      // Drain any in-flight save, then flush the pending debounce before importing.
+      await saveQueue.current;
+      if (saveBlocked.current) throw new Error('השמירה נכשלה. יש לרענן לפני סנכרון.');
+      const {data:{session:current}} = await supabase.auth.getSession();
+      if (current?.user.id !== session.user.id) throw new Error('החיבור למערכת השתנה.');
+      if (state !== loadedState.current) {
+        await apiSaveState(state, loadedState.current);
+        loadedState.current = state;
+      }
+      // Also reload after an uncertain network result: the server may have committed.
+      try { return await operation(); }
+      finally {
+        const data = await apiLoadState();
+        if (!data) throw new Error('טעינת הקטלוג נכשלה. יש לרענן את המערכת.');
+        const {data:{session:latest}} = await supabase.auth.getSession();
+        if (latest?.user.id !== session.user.id) throw new Error('החיבור למערכת השתנה.');
+        const next = mergeState(data as Partial<AppState>);
+        loadedState.current = next;
+        setState(next);
+        baselineSafe = true;
+      }
+    } catch (error) {
+      if (!baselineSafe) {
+        saveBlocked.current = true;
+        setSaveError(true);
+      }
+      throw error;
+    } finally {
+      catalogSyncLock.current = false;
+      setCatalogSyncing(false);
+    }
+  }
 
   // Run no_activity automations on mount
   useEffect(() => {
@@ -684,8 +725,8 @@ export default function App() {
       </div>{/* end sticky top wrapper */}
 
       {/* Main */}
-      <main inert={!!viewAsId || saveError} className="max-w-screen-2xl mx-auto px-4 py-6">
-        {renderedTab === 'integrations' && navUser?.role === 'admin' && <IntegrationsView />}
+      <main inert={!!viewAsId || saveError || catalogSyncing} className="max-w-screen-2xl mx-auto px-4 py-6">
+        {renderedTab === 'integrations' && navUser?.role === 'admin' && <IntegrationsView onCatalogSync={syncCatalog} />}
         {renderedTab === 'home' && (
           <HomePage
             state={effectiveState}

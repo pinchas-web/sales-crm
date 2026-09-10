@@ -1,12 +1,17 @@
 const origin = 'https://pinchashorvitz.co.il';
 
 export function wordpressConfigured() {
-  return Boolean(process.env.WORDPRESS_USERNAME && process.env.WORDPRESS_APPLICATION_PASSWORD);
+  return Boolean((process.env.WOOCOMMERCE_CONSUMER_KEY && process.env.WOOCOMMERCE_CONSUMER_SECRET) ||
+    (process.env.WORDPRESS_USERNAME && process.env.WORDPRESS_APPLICATION_PASSWORD));
 }
 
 export async function readWooCommerce(resource: 'products' | 'orders') {
   if (!wordpressConfigured()) throw new Error('WordPress credentials are not configured');
-  const authorization = `Basic ${Buffer.from(`${process.env.WORDPRESS_USERNAME}:${process.env.WORDPRESS_APPLICATION_PASSWORD}`).toString('base64')}`;
+  const wooKey = process.env.WOOCOMMERCE_CONSUMER_KEY;
+  const wooSecret = process.env.WOOCOMMERCE_CONSUMER_SECRET;
+  const authorization = `Basic ${Buffer.from(wooKey && wooSecret
+    ? `${wooKey}:${wooSecret}`
+    : `${process.env.WORDPRESS_USERNAME}:${process.env.WORDPRESS_APPLICATION_PASSWORD}`).toString('base64')}`;
   const rows: Record<string, unknown>[] = [];
   for (let page = 1; page <= 50; page++) {
     const url = new URL(`/wp-json/wc/v3/${resource}`, origin);
@@ -15,7 +20,7 @@ export async function readWooCommerce(resource: 'products' | 'orders') {
     url.searchParams.set('orderby','id');
     url.searchParams.set('order','asc');
     // Only request fields needed for the dashboard; payment metadata is excluded.
-    url.searchParams.set('_fields',resource === 'products' ? 'id,name,status,price,permalink' : 'id,status,date_created,total,currency,customer_id,line_items');
+    url.searchParams.set('_fields',resource === 'products' ? 'id,name,status,price,permalink,description,short_description,categories,images,sku,type' : 'id,status,date_created,total,currency,customer_id,line_items');
     const response = await fetch(url, {headers:{Authorization:authorization}, redirect:'error', signal:AbortSignal.timeout(15000)});
     if (!response.ok) throw new Error(`WordPress request failed (${response.status})`);
     const batch: unknown = await response.json();

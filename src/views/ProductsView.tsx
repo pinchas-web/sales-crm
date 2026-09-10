@@ -30,6 +30,7 @@ function ProductCard({ product, onClick }: { product: Product; onClick: () => vo
           </span>
         </div>
         <p className="text-xs text-gray-500 mb-2 line-clamp-2">{product.shortDescription}</p>
+        {product.wooCommerceId !== undefined && <p className="text-xs text-teal-700 mb-2">WooCommerce · #{product.wooCommerceId}{product.sourceMissing ? ' · לא נמצא בחנות' : ''}</p>}
         <div className="flex items-center justify-between">
           <span className="text-lg font-bold text-blue-700">₪{product.price.toLocaleString('he-IL')}</span>
           <span className="text-xs text-gray-400">{product.category}</span>
