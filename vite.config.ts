@@ -2,6 +2,16 @@ import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createClient } from '@supabase/supabase-js'
 
+// Preview must not ship a browser client connected to the production database.
+if (process.env.VERCEL_ENV === 'preview') {
+  const env = loadEnv('production', process.cwd(), '');
+  const stagingUrl = 'https://ykavhezwzrngqaxhjxsg.supabase.co';
+  if (env.VITE_SUPABASE_URL?.replace(/\/$/, '') !== stagingUrl ||
+      env.SUPABASE_URL?.replace(/\/$/, '') !== stagingUrl) {
+    throw new Error('Configure isolated staging Supabase URLs before deploying this preview');
+  }
+}
+
 function localForgotPasswordApi(): Plugin {
   return {
     name: 'local-forgot-password-api',

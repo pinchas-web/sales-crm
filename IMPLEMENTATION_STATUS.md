@@ -40,3 +40,10 @@ This branch is work in progress, not a production release. Do not merge or use a
 10. SUMIT remains paused by owner request.
 
 No migrations, deployments, external-source mutations, or business-data changes have been performed by this branch's work.
+
+## Staging setup checkpoint (2026-09-09)
+- Supabase staging project: ykavhezwzrngqaxhjxsg. Baseline schema creation verified successful in SQL editor.
+- Migrations 002-004 were pasted into staging SQL editor. Run action timed out and browser inventory also timed out. Execution outcome is UNKNOWN: inspect schema before retrying.
+- No staging deployment or real data import completed. Production database was not targeted.
+- Local npm test: 5 tests passed.
+

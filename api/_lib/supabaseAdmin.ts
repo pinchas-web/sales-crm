@@ -14,7 +14,7 @@ function readLocalEnv(name: string) {
 
     const match = readFileSync(path, 'utf8')
       .split(/\r?\n/)
-      .map((line) => line.match(new RegExp(`^${name}=\\\"?([^\\\"]+)\\\"?$`))?.[1]?.trim())
+      .map((line) => line.match(new RegExp(`^${name}=(.*)$`))?.[1]?.trim().replace(/^(['"])(.*)\1$/, '$2'))
       .find(Boolean);
 
     if (match) return match;
@@ -26,8 +26,7 @@ function readLocalEnv(name: string) {
 const supabaseUrl = (
   process.env.SUPABASE_URL ??
   process.env.VITE_SUPABASE_URL ??
-  readLocalEnv('SUPABASE_URL') ??
-  readLocalEnv('VITE_SUPABASE_URL')
+  (readLocalEnv('SUPABASE_URL') || readLocalEnv('VITE_SUPABASE_URL'))
 ).trim();
 
 const supabaseServiceRole = (
@@ -40,6 +39,10 @@ console.log('[supabaseAdmin] init — SUPABASE_URL present:', !!supabaseUrl, '| 
 if (!supabaseUrl || !supabaseServiceRole) {
   console.error('[supabaseAdmin] FATAL: Missing env vars. URL:', supabaseUrl ? 'set' : 'MISSING', 'KEY:', supabaseServiceRole ? 'set' : 'MISSING');
   throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars');
+}
+
+if (process.env.VERCEL_ENV === 'preview' && new URL(supabaseUrl).hostname === 'byrwxkevcuhtzzearukp.supabase.co') {
+  throw new Error('Preview deployments must use an isolated staging database');
 }
 
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRole, {
