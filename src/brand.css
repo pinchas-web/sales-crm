@@ -69,7 +69,7 @@
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   2. ANIMATIONS
+   2. ANIMATIONS & MICRO-INTERACTIONS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 @keyframes brand-fadeIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -92,12 +92,39 @@
   70%  { box-shadow: 0 0 0 8px rgba(199,38,58,.00); }
   100% { box-shadow: 0 0 0 0   rgba(199,38,58,.00); }
 }
+@keyframes brand-pulse-gold {
+  0%   { box-shadow: 0 0 0 0   rgba(210,171,98,.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(210,171,98,.00); }
+  100% { box-shadow: 0 0 0 0   rgba(210,171,98,.00); }
+}
 @keyframes brand-shimmer {
   0%   { background-position: 200% center; }
   100% { background-position: -200% center; }
 }
+@keyframes brand-shimmer-sheen {
+  0%   { transform: translateX(120%); }
+  100% { transform: translateX(-120%); }
+}
 @keyframes brand-spin {
   to { transform: rotate(360deg); }
+}
+@keyframes brand-task-check {
+  0%   { transform: scale(0.85); }
+  50%  { transform: scale(1.22); filter: drop-shadow(0 0 6px rgba(210,171,98,0.8)); }
+  100% { transform: scale(1); }
+}
+@keyframes brand-celebrate-burst {
+  0%   { transform: scale(0.95); opacity: 0.8; }
+  50%  { transform: scale(1.03); box-shadow: 0 0 25px rgba(210,171,98,0.6); }
+  100% { transform: scale(1); }
+}
+@keyframes brand-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+@keyframes brand-badge-glow {
+  0%, 100% { filter: drop-shadow(0 1px 3px rgba(199,38,58,0.3)); }
+  50%      { filter: drop-shadow(0 2px 8px rgba(210,171,98,0.6)); }
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -875,3 +902,160 @@ label[class*="text-xs"] {
   font-size: .72rem;
   font-weight: 600;
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   31. LUXURY INTERACTIVE CRM ENHANCEMENTS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Glassmorphic Luxury Header */
+.brand-glass-header {
+  background: linear-gradient(135deg, rgba(130,24,40,0.96) 0%, rgba(163,31,49,0.94) 50%, rgba(199,38,58,0.92) 100%) !important;
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border-bottom: 1px solid rgba(210,171,98,0.28) !important;
+  box-shadow: 0 4px 24px rgba(130,24,40,0.22), 0 1px 0 rgba(255,255,255,0.12) inset !important;
+}
+
+/* Nav Tab Pill with Active Underglow */
+.brand-nav-btn {
+  position: relative;
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  border-radius: 10px !important;
+}
+.brand-nav-btn:hover {
+  transform: translateY(-1px);
+}
+.brand-nav-btn.brand-nav-active {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border: 1px solid rgba(210, 171, 98, 0.4) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 14px rgba(210, 171, 98, 0.25) !important;
+  font-weight: 700 !important;
+}
+.brand-nav-btn.brand-nav-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--c-gold);
+  border-radius: 2px;
+  box-shadow: 0 0 6px var(--c-gold);
+}
+
+/* Luxury KPI Cards */
+.brand-kpi-card {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.brand-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(to bottom, var(--c-primary), var(--c-gold));
+  border-radius: 0 16px 16px 0;
+  opacity: 0.75;
+  transition: width 0.2s ease, opacity 0.2s ease;
+}
+.brand-kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(28, 24, 21, 0.08), 0 0 0 1px rgba(210, 171, 98, 0.3);
+}
+.brand-kpi-card:hover::before {
+  width: 6px;
+  opacity: 1;
+}
+
+/* High Performance Progress Bar with Shimmer */
+.brand-progress-container {
+  position: relative;
+  overflow: hidden;
+  background: rgba(229, 221, 212, 0.6);
+  border-radius: 9999px;
+}
+.brand-progress-fill {
+  position: relative;
+  height: 100%;
+  background: linear-gradient(90deg, var(--c-primary) 0%, var(--c-gold) 100%);
+  border-radius: 9999px;
+  transition: width 0.5s cubic-bezier(0.34, 1.2, 0.64, 1);
+  overflow: hidden;
+}
+.brand-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: brand-shimmer-sheen 2.2s infinite;
+}
+
+/* Task Item with Tactile Checkbox and Celebration */
+.brand-task-item {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 10px;
+}
+.brand-task-item:hover {
+  background-color: var(--c-surface-2);
+}
+.brand-task-checked {
+  animation: brand-task-check 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Celebration Box (When 100% tasks completed or deal won) */
+.brand-celebrate-box {
+  background: linear-gradient(135deg, #FDF8EE 0%, #FFF3DC 100%);
+  border: 1.5px solid rgba(210, 171, 98, 0.5);
+  box-shadow: 0 4px 18px rgba(210, 171, 98, 0.25);
+  animation: brand-celebrate-burst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Hot Lead Pulse & Glowing Flame */
+.brand-hot-flame {
+  display: inline-block;
+  animation: brand-float 2s ease-in-out infinite;
+}
+.brand-hot-badge {
+  box-shadow: 0 0 10px rgba(199, 38, 58, 0.35);
+  animation: brand-pulse-ring 2.5s infinite;
+}
+
+/* Quick Action Circle Buttons (WhatsApp, Phone, Calendar) */
+.brand-action-circle {
+  transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border-radius: 8px;
+}
+.brand-action-circle:hover {
+  transform: scale(1.18);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.15));
+}
+.brand-action-circle:active {
+  transform: scale(0.92);
+}
+
+/* Kanban Enhanced Card */
+.brand-kanban-card {
+  border: 1px solid var(--c-border);
+  transition: all 0.22s cubic-bezier(0.34, 1.4, 0.64, 1) !important;
+}
+.brand-kanban-card:hover {
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 8px 20px rgba(28, 24, 21, 0.1), 0 0 0 1px rgba(210, 171, 98, 0.35) !important;
+  border-color: rgba(210, 171, 98, 0.5) !important;
+}
+
