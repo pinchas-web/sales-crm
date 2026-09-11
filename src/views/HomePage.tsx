@@ -9,22 +9,22 @@ import { Btn, ScoreBadge, Textarea } from '../ui';
 
 // ─── KPI Cards ────────────────────────────────────────────────────────────────
 
-// ─── KPI Cards ────────────────────────────────────────────────────────────────
+type KpiTone = 'primary' | 'success' | 'info' | 'gold' | 'danger';
 
-function KpiCard({ icon, value, label, sub, color: _color }: {
-  icon: string; value: string | number; label: string; sub?: string; color: string;
+function KpiCard({ icon, value, label, sub, tone }: {
+  icon: string; value: string | number; label: string; sub?: string; tone: KpiTone;
 }) {
   return (
-    <div className="brand-kpi-card p-4 sm:p-5 flex items-center gap-4 cursor-default select-none">
-      <div className="w-12 h-12 rounded-2xl bg-amber-50/80 border border-amber-200/50 flex items-center justify-center text-2xl shadow-xs flex-shrink-0 transition-transform group-hover:scale-110">
-        <span className="transition-transform hover:scale-125 duration-200 inline-block">{icon}</span>
+    <div data-tone={tone} className="brand-kpi-card group p-4 sm:p-5 flex items-center gap-4 cursor-default select-none">
+      <div className="brand-kpi-tile w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs flex-shrink-0 transition-transform group-hover:scale-110">
+        <span>{icon}</span>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 leading-none mb-1">
+        <p className="brand-kpi-value text-2xl sm:text-3xl font-extrabold tracking-tight leading-none mb-1">
           {value}
         </p>
         <p className="text-xs font-semibold text-gray-500 truncate">{label}</p>
-        {sub && <p className="text-[11px] font-medium text-amber-700/90 mt-1 bg-amber-50 inline-block px-1.5 py-0.5 rounded-md border border-amber-200/50">{sub}</p>}
+        {sub && <p className="brand-kpi-sub text-[11px] font-semibold mt-1 inline-block px-1.5 py-0.5 rounded-md">{sub}</p>}
       </div>
     </div>
   );
@@ -40,7 +40,7 @@ function HotLeadsTable({ state, onLeadClick }: { state: AppState; onLeadClick: (
 
   if (myHot.length === 0) return (
     <div className="bg-white rounded-2xl border border-gray-200/80 p-6 flex flex-col items-center justify-center min-h-48 shadow-sm">
-      <span className="text-4xl mb-2 animate-bounce">🎉</span>
+      <span className="text-4xl mb-2">🎉</span>
       <p className="text-gray-500 text-sm font-medium">אין לידים חמים להיום — מעולה!</p>
     </div>
   );
@@ -336,16 +336,18 @@ export default function HomePage({
     state.statuses.find(s => s.id === l.status)?.isWon && new Date(l.updated_at) >= monthStart
   ).length;
   const todayTasks = state.tasks.filter(t => t.assigned_to === state.currentUserId && t.due_date === TODAY && !t.done).length;
+  const overdue    = state.tasks.filter(t => t.assigned_to === state.currentUserId && t.due_date < TODAY && !t.done).length;
   const { commission } = calcCommission(state, state.currentUserId);
 
   const hour = new Date().getHours();
   const sub  = getL('home.sub', state.labels);
 
-  const kpis = [
-    { icon: '🔄', value: active,   label: getL('kpi.active_leads', state.labels),  color: 'bg-blue-50 border-blue-200 text-blue-700' },
-    { icon: '✅', value: wonMonth, label: getL('kpi.won_month', state.labels),       color: 'bg-green-50 border-green-200 text-green-700' },
-    { icon: '📋', value: todayTasks, label: getL('kpi.today_tasks', state.labels),  color: 'bg-amber-50 border-amber-200 text-amber-700' },
-    ...(!isAdmin ? [{ icon: '💰', value: `₪${commission.toLocaleString('he-IL')}`, label: getL('kpi.commission', state.labels), color: 'bg-purple-50 border-purple-200 text-purple-700', sub: `${currentUser.commissionRate * 100}% עמלה` }] : []),
+  const kpis: { icon: string; value: string | number; label: string; tone: KpiTone; sub?: string }[] = [
+    { icon: '🔄', value: active,   label: getL('kpi.active_leads', state.labels), tone: 'primary' },
+    { icon: '✅', value: wonMonth, label: getL('kpi.won_month', state.labels),    tone: 'success' },
+    { icon: overdue > 0 ? '⚠️' : '📋', value: todayTasks, label: getL('kpi.today_tasks', state.labels),
+      tone: overdue > 0 ? 'danger' : 'info', sub: overdue > 0 ? `${overdue} באיחור` : undefined },
+    ...(!isAdmin ? [{ icon: '💰', value: `₪${commission.toLocaleString('he-IL')}`, label: getL('kpi.commission', state.labels), tone: 'gold' as const, sub: `${currentUser.commissionRate * 100}% עמלה` }] : []),
   ];
 
   return (
@@ -356,8 +358,8 @@ export default function HomePage({
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-amber-200 text-xs font-semibold mb-2 border border-white/10">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>מרכז שליטה פעיל</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span>מרכז שליטה</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-1 flex items-center gap-2">
               <span>{hour < 12 ? '☀️' : hour < 17 ? '🌤️' : '🌙'}</span>
@@ -367,10 +369,9 @@ export default function HomePage({
           </div>
           <div className="flex items-center gap-3">
             <div className="text-left sm:text-right bg-black/20 backdrop-blur-sm px-4 py-2.5 rounded-2xl border border-white/10">
-              <p className="text-[11px] font-medium text-amber-200">סטטוס צוות</p>
-              <p className="text-sm font-bold text-white flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse" />
-                {state.leads.length} לידים במערכת
+              <p className="text-[11px] font-medium text-amber-200">{isAdmin ? 'סה״כ במערכת' : 'הלידים שלי'}</p>
+              <p className="text-sm font-bold text-white">
+                {myLeads.length} לידים
               </p>
             </div>
           </div>

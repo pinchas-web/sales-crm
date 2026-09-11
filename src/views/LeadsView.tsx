@@ -858,8 +858,11 @@ function KanbanCard({ lead, state, onClick, isDragging, dragProps }: {
         <span className="font-medium text-gray-600 truncate max-w-[8rem]">{user?.name ?? '—'}</span>
         {nextTask && (
           <span className={`font-semibold px-1.5 py-0.5 rounded text-[11px] flex items-center gap-1 ${nextTask.due_date < TODAY ? 'bg-red-50 text-red-600 border border-red-200/60' : nextTask.due_date === TODAY ? 'bg-amber-50 text-amber-700 border border-amber-200/60' : 'text-gray-500'}`}>
-            <span>⏰</span>
-            <span>{nextTask.due_date}</span>
+            <span>{nextTask.due_date < TODAY ? '⚠️' : '⏰'}</span>
+            <span>
+              {nextTask.due_date < TODAY ? 'באיחור · ' : nextTask.due_date === TODAY ? 'היום · ' : ''}
+              {nextTask.due_date}
+            </span>
           </span>
         )}
       </div>
@@ -1322,6 +1325,9 @@ export default function LeadsView({
     const task = state.tasks.find(t => t.id === id);
     if (task) onUpdateTask ? onUpdateTask(id, { done: !task.done }) : onAddTask({ ...task, done: !task.done });
   }
+  // נציג רואה רק את מספר הלידים שלו; מנהל רואה את כולם
+  const isAdmin = state.users.find(u => u.id === state.currentUserId)?.role === 'admin';
+  const myLeadCount = isAdmin ? state.leads.length : state.leads.filter(l => l.assigned_to === state.currentUserId).length;
 
   return (
     <div>
@@ -1330,7 +1336,7 @@ export default function LeadsView({
         <div className="flex items-center gap-2.5">
           <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">ניהול לידים</h1>
           <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/70 px-2.5 py-0.5 rounded-full shadow-2xs">
-            {state.leads.length} סה״כ
+            {myLeadCount} סה״כ
           </span>
         </div>
         <div className="flex items-center gap-2.5">

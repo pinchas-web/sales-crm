@@ -624,7 +624,7 @@ export default function App() {
                   <span className="text-sm">{tab.icon}</span>
                   <span className="hidden md:inline">{label}</span>
                   {badge > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-gradient-to-tr from-amber-500 to-amber-300 text-black text-[10px] font-extrabold rounded-full min-w-4 h-4 px-1 flex items-center justify-center shadow-md animate-pulse">
+                    <span className="brand-nav-badge absolute -top-0.5 -right-1 text-[10px] font-extrabold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">
                       {badge > 9 ? '9+' : badge}
                     </span>
                   )}
@@ -632,7 +632,7 @@ export default function App() {
               );
             })}
           </nav>
-          {/* UserBadge */}
+          {/* UserBadge במקום UserSwitcher — ללא אפשרות החלפת משתמש */}
           <UserBadge state={state} />
         </div>
       </header>
