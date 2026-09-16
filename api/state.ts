@@ -9,7 +9,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateRequest } from './_lib/auth';
 import { supabaseAdmin }   from './_lib/supabaseAdmin';
-import { diffRows, type RecordRow } from '../src/state-diff';
+import { diffRows, type RecordRow } from './_lib/state-diff';
 
 console.log('[CRM state.ts] module loaded — handler registered');
 

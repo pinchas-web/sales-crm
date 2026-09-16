@@ -4,7 +4,8 @@ import {readFile} from 'node:fs/promises';
 import {transform} from 'esbuild';
 const {code}=await transform(await readFile('api/_lib/wordpress.ts','utf8'),{loader:'ts',format:'esm'});
 const {readWooCommerce}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
-import {diffRows} from '../src/state-diff.ts';
+const {code:diffCode}=await transform(await readFile('api/_lib/state-diff.ts','utf8'),{loader:'ts',format:'esm'});
+const {diffRows}=await import(`data:text/javascript;base64,${Buffer.from(diffCode).toString('base64')}`);
 
 test('changes contain only explicit edits and deletes',()=>{
   const before=[{id:'a',name:'Old'},{id:'b',name:'Keep'}];
