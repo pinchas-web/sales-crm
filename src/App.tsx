@@ -136,22 +136,22 @@ function UserBadge({ state }: { state: AppState }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-white">
-        <div className="w-7 h-7 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold">
-          {current?.name.charAt(0)}
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/15 backdrop-blur-xs border border-white/10 text-white shadow-2xs">
+        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500/40 to-white/30 border border-amber-300/50 flex items-center justify-center text-xs font-extrabold text-amber-100 shadow-xs">
+          {current?.name ? current.name.charAt(0) : '👤'}
         </div>
         <div className="hidden sm:block text-right">
-          <p className="text-xs font-medium leading-none">{current?.name}</p>
-          <p className="text-[10px] opacity-60 leading-none mt-0.5">
-            {current?.role === 'admin' ? 'מנהל' : 'נציג'}
+          <p className="text-xs font-bold leading-none text-amber-100">{current?.name}</p>
+          <p className="text-[10px] text-amber-200/60 leading-none mt-1">
+            {current?.role === 'admin' ? '👑 מנהל' : '💼 נציג'}
           </p>
         </div>
       </div>
       <button
         onClick={handleLogout}
         title="יציאה מהמערכת"
-        className="text-white/70 hover:text-white text-xs px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+        className="text-white/70 hover:text-amber-200 hover:bg-white/10 text-xs px-2.5 py-1.5 rounded-xl transition-all cursor-pointer select-none"
       >
         יציאה
       </button>
@@ -601,12 +601,17 @@ export default function App() {
         )}
 
       {/* Header */}
-      <header className="bg-gradient-to-l from-blue-700 to-indigo-700 text-white shadow-lg">
-        <div className="max-w-screen-2xl mx-auto px-4 py-2.5 flex items-center gap-2">
-          <h1 className="text-base font-bold tracking-wide ml-2 shrink-0">
-            {getLabel('app.title')}
-          </h1>
-          <nav className="flex-1 flex items-center gap-0.5 overflow-x-auto">
+      <header className="brand-glass-header text-white transition-all">
+        <div className="max-w-screen-2xl mx-auto px-4 py-2.5 flex items-center gap-3">
+          <div className="flex items-center gap-2 ml-2 shrink-0 select-none">
+            <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500/30 to-amber-200/20 border border-amber-300/40 flex items-center justify-center text-sm shadow-xs">
+              ⚡
+            </span>
+            <h1 className="text-base font-extrabold tracking-wide text-white drop-shadow-xs">
+              {getLabel('app.title')}
+            </h1>
+          </div>
+          <nav className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide py-0.5">
             {visibleTabs.map(tab => {
               const isActive = activeTab === tab.id;
               const label = getLabel(`tab.${tab.id}`) || tab.defaultLabel;
@@ -615,11 +620,11 @@ export default function App() {
                 tab.id === 'tasks' ? overdueTasks : 0;
               return (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${isActive ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}>
-                  <span>{tab.icon}</span>
-                  <span className="hidden lg:inline">{label}</span>
+                  className={`relative brand-nav-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer select-none ${isActive ? 'brand-nav-active text-amber-100' : 'text-white/75 hover:text-white hover:bg-white/10'}`}>
+                  <span className="text-sm">{tab.icon}</span>
+                  <span className="hidden md:inline">{label}</span>
                   {badge > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 bg-gradient-to-tr from-amber-500 to-amber-300 text-black text-[10px] font-extrabold rounded-full min-w-4 h-4 px-1 flex items-center justify-center shadow-md animate-pulse">
                       {badge > 9 ? '9+' : badge}
                     </span>
                   )}
@@ -627,7 +632,7 @@ export default function App() {
               );
             })}
           </nav>
-          {/* UserBadge במקום UserSwitcher — ללא אפשרות החלפת משתמש */}
+          {/* UserBadge */}
           <UserBadge state={state} />
         </div>
       </header>

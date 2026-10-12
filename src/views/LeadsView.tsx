@@ -804,23 +804,62 @@ function KanbanCard({ lead, state, onClick, isDragging, dragProps }: {
     .sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
   const user = state.users.find(u => u.id === lead.assigned_to);
   const products = lead.interestedIn.map(pid => state.products.find(p => p.id === pid)).filter(Boolean);
+  const status = state.statuses.find(s => s.id === lead.status);
+  const isWon = status?.isWon;
+
   return (
     <div onClick={onClick} {...dragProps}
-      className={`bg-white rounded-xl border shadow-sm p-3 cursor-pointer hover:shadow-md transition-all select-none ${isDragging ? 'shadow-xl rotate-1 scale-105 opacity-90' : ''}`}>
-      <div className="flex items-center justify-between mb-1">
-        <p className="font-semibold text-gray-900 text-sm truncate flex-1">{lead.name}</p>
+      className={`brand-kanban-card bg-white rounded-2xl p-3.5 cursor-pointer shadow-xs select-none relative group ${isWon ? 'border-amber-400/60 bg-gradient-to-b from-amber-50/30 to-white' : ''} ${isDragging ? 'shadow-2xl rotate-2 scale-105 opacity-95 ring-2 ring-amber-500 z-50' : ''}`}>
+      
+      {/* Top row: Name & Score */}
+      <div className="flex items-center justify-between mb-1.5 gap-2">
+        <p className="font-bold text-gray-900 text-sm truncate flex-1 group-hover:text-red-800 transition-colors">
+          {isWon && <span className="ml-1 text-sm">🏆</span>}
+          {lead.name}
+        </p>
         <ScoreBadge score={lead.score} />
       </div>
-      <p className="text-xs text-gray-500 mb-2">📞 {lead.phone}</p>
-      <div className="flex flex-wrap gap-1 mb-2">
-        {products.map(p => p && <Badge key={p.id} label={p.name} colorClass="bg-indigo-100 text-indigo-700" />)}
-        {lead.dealValue && <Badge label={`₪${lead.dealValue.toLocaleString()}`} colorClass="bg-green-100 text-green-700" />}
+
+      {/* Phone & quick actions */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-gray-500 font-mono">📞 {lead.phone}</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={e => { e.stopPropagation(); openWhatsApp(lead.phone); }}
+            title="שלח WhatsApp"
+            className="brand-action-circle w-6 h-6 flex items-center justify-center text-xs bg-green-50 text-green-600 hover:bg-green-600 hover:text-white border border-green-200/50">
+            💬
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); window.location.href = `tel:${lead.phone}`; }}
+            title="חייג"
+            className="brand-action-circle w-6 h-6 flex items-center justify-center text-xs bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-200/50">
+            ☎️
+          </button>
+        </div>
       </div>
-      <div className="flex items-center justify-between text-xs text-gray-400">
-        <span>{user?.name}</span>
+
+      {/* Badges: Products & Deal value */}
+      <div className="flex flex-wrap gap-1.5 mb-2.5">
+        {products.map(p => p && (
+          <span key={p.id} className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/60">
+            {p.name}
+          </span>
+        ))}
+        {lead.dealValue && (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200/60">
+            ₪{lead.dealValue.toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      {/* Footer: Assignee & Next Task */}
+      <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
+        <span className="font-medium text-gray-600 truncate max-w-[8rem]">{user?.name ?? '—'}</span>
         {nextTask && (
-          <span className={`font-medium ${nextTask.due_date < TODAY ? 'text-red-500' : nextTask.due_date === TODAY ? 'text-amber-500' : ''}`}>
-            📅 {nextTask.due_date}
+          <span className={`font-semibold px-1.5 py-0.5 rounded text-[11px] flex items-center gap-1 ${nextTask.due_date < TODAY ? 'bg-red-50 text-red-600 border border-red-200/60' : nextTask.due_date === TODAY ? 'bg-amber-50 text-amber-700 border border-amber-200/60' : 'text-gray-500'}`}>
+            <span>⏰</span>
+            <span>{nextTask.due_date}</span>
           </span>
         )}
       </div>
@@ -845,21 +884,33 @@ function KanbanBoard({ state, onLeadClick, onStatusChange, onAddLead }: {
     if (!r.destination) return;
     onStatusChange(r.draggableId, r.destination.droppableId);
   }
+
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-4 items-start overflow-x-auto pb-4" dir="ltr">
+      <div className="flex gap-4 items-start overflow-x-auto pb-6 pt-1" dir="ltr">
         {sorted.map(status => {
           const cards = visible.filter(l => l.status === status.id);
           return (
-            <div key={status.id} className="flex-shrink-0 w-60" dir="rtl">
-              <div className="rounded-t-xl px-3 py-2.5 flex items-center justify-between" style={{ backgroundColor: status.color }}>
-                <span className="font-bold text-sm truncate" style={{ color: status.textColor }}>{status.label}</span>
-                <span className="text-xs rounded-full px-2 py-0.5 font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.25)', color: status.textColor }}>{cards.length}</span>
+            <div key={status.id} className="flex-shrink-0 w-64 rounded-2xl bg-gray-100/70 border border-gray-200/80 shadow-xs flex flex-col overflow-hidden" dir="rtl">
+              {/* Column Header */}
+              <div
+                className="px-4 py-3 flex items-center justify-between shadow-xs"
+                style={{ backgroundColor: status.color }}>
+                <span className="font-extrabold text-sm truncate drop-shadow-xs" style={{ color: status.textColor }}>
+                  {status.label}
+                </span>
+                <span
+                  className="text-xs rounded-full px-2.5 py-0.5 font-bold shadow-xs backdrop-blur-sm"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.28)', color: status.textColor }}>
+                  {cards.length}
+                </span>
               </div>
+
+              {/* Column Droppable Body */}
               <Droppable droppableId={status.id}>
                 {(prov, snap) => (
                   <div ref={prov.innerRef} {...prov.droppableProps}
-                    className={`min-h-16 rounded-b-xl p-2 space-y-2 transition-colors ${snap.isDraggingOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : 'bg-gray-100/80'}`}>
+                    className={`min-h-24 p-2.5 space-y-2.5 transition-all duration-200 ${snap.isDraggingOver ? 'bg-amber-50/60 ring-2 ring-amber-400 ring-inset rounded-b-2xl' : ''}`}>
                     {cards.map((lead, index) => (
                       <Draggable key={lead.id} draggableId={lead.id} index={index}>
                         {(dp, ds) => (
@@ -871,9 +922,11 @@ function KanbanBoard({ state, onLeadClick, onStatusChange, onAddLead }: {
                       </Draggable>
                     ))}
                     {prov.placeholder}
-                    <button onClick={() => onAddLead(status.id)}
-                      className="w-full text-xs text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg py-1.5 transition-colors">
-                      + ליד חדש
+                    <button
+                      onClick={() => onAddLead(status.id)}
+                      className="w-full text-xs font-semibold text-gray-500 hover:text-gray-900 bg-white/60 hover:bg-white border border-dashed border-gray-300 hover:border-amber-400 rounded-xl py-2 transition-all flex items-center justify-center gap-1 shadow-2xs">
+                      <span>+</span>
+                      <span>הוסף ליד לטור זה</span>
                     </button>
                   </div>
                 )}
@@ -1273,22 +1326,24 @@ export default function LeadsView({
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-800">לידים</h1>
-          <span className="text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{state.leads.length}</span>
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">ניהול לידים</h1>
+          <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/70 px-2.5 py-0.5 rounded-full shadow-2xs">
+            {state.leads.length} סה״כ
+          </span>
         </div>
-        <div className="flex gap-2">
-          <div className="flex rounded-lg border overflow-hidden bg-white">
+        <div className="flex items-center gap-2.5">
+          <div className="flex rounded-xl border border-gray-200/80 p-0.5 bg-gray-100 shadow-2xs">
             {(['table', 'kanban'] as ViewMode[]).map(m => (
               <button key={m} onClick={() => setMode(m)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${mode === m ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all select-none cursor-pointer ${mode === m ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'}`}>
                 {m === 'table' ? '📋 טבלה' : '🗂️ קנבן'}
               </button>
             ))}
           </div>
-          <Btn variant="secondary" onClick={() => setCsvOpen(true)}>📂 ייבוא CSV</Btn>
-          <Btn onClick={() => openAdd()}>+ ליד חדש</Btn>
+          <Btn variant="secondary" onClick={() => setCsvOpen(true)} className="rounded-xl shadow-xs">📂 ייבוא CSV</Btn>
+          <Btn onClick={() => openAdd()} className="rounded-xl shadow-xs">+ ליד חדש</Btn>
         </div>
       </div>
 

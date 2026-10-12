@@ -23,22 +23,22 @@ export function Btn({
   variant?: BtnVariant; size?: BtnSize; disabled?: boolean; className?: string;
   type?: 'button' | 'submit'; title?: string;
 }) {
-  const base = 'inline-flex items-center gap-1 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 flex-shrink-0 whitespace-nowrap';
+  const base = 'inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition-all duration-150 active:scale-[0.96] focus:outline-none focus:ring-2 focus:ring-offset-1 flex-shrink-0 whitespace-nowrap cursor-pointer select-none';
   const sz: Record<BtnSize, string> = {
-    xs: 'px-1.5 py-0.5 text-xs',
-    sm: 'px-2.5 py-1 text-xs',
-    md: 'px-3 py-1.5 text-sm',
+    xs: 'px-2 py-0.5 text-xs',
+    sm: 'px-3 py-1.5 text-xs shadow-xs',
+    md: 'px-4 py-2 text-sm shadow-sm',
   };
   const v: Record<BtnVariant, string> = {
-    primary:   'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400',
-    secondary: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-300',
-    danger:    'bg-red-600 text-white hover:bg-red-700 focus:ring-red-400',
-    ghost:     'text-gray-600 hover:bg-gray-100 focus:ring-gray-300',
-    success:   'bg-green-600 text-white hover:bg-green-700 focus:ring-green-400',
+    primary:   'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md focus:ring-amber-400',
+    secondary: 'bg-white border border-gray-300 text-gray-700 hover:bg-amber-50/50 hover:border-amber-300 hover:text-amber-900 focus:ring-gray-300',
+    danger:    'bg-red-600 text-white hover:bg-red-700 hover:shadow-md focus:ring-red-400',
+    ghost:     'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-300',
+    success:   'bg-green-600 text-white hover:bg-green-700 hover:shadow-md focus:ring-green-400',
   };
   return (
     <button type={type} onClick={onClick} disabled={disabled} title={title}
-      className={`${base} ${sz[size]} ${v[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
+      className={`${base} ${sz[size]} ${v[variant]} ${disabled ? 'opacity-40 cursor-not-allowed active:scale-100' : ''} ${className}`}>
       {children}
     </button>
   );
@@ -55,7 +55,7 @@ export function Input({ value, onChange, placeholder, type = 'text', className =
     <input type={type} value={value} autoFocus={autoFocus}
       onChange={e => onChange(e.target.value)} placeholder={placeholder}
       onKeyDown={onKeyDown}
-      className={`border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white ${className}`} />
+      className={`border border-gray-300 rounded-xl px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-500 bg-white transition-all shadow-xs ${className}`} />
   );
 }
 
@@ -68,7 +68,7 @@ export function SelectInput({ value, onChange, options, placeholder, className =
 }) {
   return (
     <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
-      className={`border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white ${disabled ? 'opacity-50' : ''} ${className}`}>
+      className={`border border-gray-300 rounded-xl px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-500 bg-white transition-all shadow-xs ${disabled ? 'opacity-50' : ''} ${className}`}>
       {placeholder && <option value="">{placeholder}</option>}
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -89,14 +89,14 @@ export function Modal({ open, onClose, title, children, wide }: {
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className={`bg-white rounded-xl shadow-2xl flex flex-col max-h-[92vh] w-full ${wide ? 'max-w-3xl' : 'max-w-lg'}`}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose}>
+      <div className={`bg-white rounded-2xl shadow-2xl flex flex-col max-h-[92vh] w-full border border-gray-200/80 transition-all ${wide ? 'max-w-3xl' : 'max-w-lg'}`}
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
-          <h2 className="text-lg font-bold text-gray-800">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100">&times;</button>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0 bg-gray-50/70 rounded-t-2xl">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200/60 transition-colors">&times;</button>
         </div>
-        <div className="overflow-y-auto flex-1 p-5">{children}</div>
+        <div className="overflow-y-auto flex-1 p-6">{children}</div>
       </div>
     </div>
   );
@@ -105,19 +105,28 @@ export function Modal({ open, onClose, title, children, wide }: {
 // ─── Score Badge ──────────────────────────────────────────────────────────────
 
 export function ScoreBadge({ score }: { score: number }) {
-  const cls = score >= 75 ? 'bg-green-100 text-green-700' : score >= 45 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600';
-  return <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${cls}`}>⭐ {score}</span>;
+  const cls = score >= 75
+    ? 'bg-amber-50 text-amber-800 border border-amber-300/80 shadow-xs'
+    : score >= 45
+    ? 'bg-yellow-50 text-yellow-800 border border-yellow-300/60'
+    : 'bg-red-50 text-red-700 border border-red-200';
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full transition-transform hover:scale-105 select-none ${cls}`}>
+      <span>⭐</span>
+      <span>{score}</span>
+    </span>
+  );
 }
 
 // ─── Progress Bar ─────────────────────────────────────────────────────────────
 
-export function ProgressBar({ value, max, colorClass = 'bg-blue-500' }: {
+export function ProgressBar({ value, max, colorClass = 'brand-progress-fill' }: {
   value: number; max: number; colorClass?: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-      <div className={`${colorClass} h-full rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+    <div className="w-full brand-progress-container h-2 shadow-inner">
+      <div className={`${colorClass} h-full rounded-full transition-all duration-500 ease-out`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
