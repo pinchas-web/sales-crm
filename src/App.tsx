@@ -11,6 +11,7 @@ import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
 
 import LoginScreen, { ResetPasswordScreen } from './views/LoginScreen';
+import OAuthConsent from './views/OAuthConsent';
 import HomePage      from './views/HomePage';
 import LeadsView     from './views/LeadsView';
 // טעינה עצלה — CoursesView כולל pdfjs-dist, מופרד לchunk נפרד
@@ -162,6 +163,7 @@ function UserBadge({ state }: { state: AppState }) {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const isOAuthConsent = window.location.pathname === '/oauth/consent';
   // ── Auth state ────────────────────────────────────────────────────────────
   const [session, setSession]               = useState<Session | null>(null);
   const [authLoading, setAuthLoading]       = useState(true);
@@ -206,7 +208,7 @@ export default function App() {
   // טעינה ראשונית מ-API (רק כשיש session)
   const didLoad = useRef(false);
   useEffect(() => {
-    if (!session || didLoad.current) return;
+    if (!session || isOAuthConsent || didLoad.current) return;
     didLoad.current = true;
     apiLoadState()
       .then(data => {
@@ -221,7 +223,7 @@ export default function App() {
         }
       })
       .finally(() => setLoading(false));
-  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session, isOAuthConsent]);
 
   // איפוס כשמשתמש מתנתק
   useEffect(() => {
@@ -564,6 +566,11 @@ export default function App() {
   // אין session — מציג מסך כניסה
   if (!session) {
     return <LoginScreen initialMessage={authNotice} />;
+  }
+
+  // מסך הסכמה ללקוחות OAuth (למשל Plugin פרטי ב-ChatGPT)
+  if (isOAuthConsent) {
+    return <OAuthConsent />;
   }
 
   // טעינת נתונים ראשונית
