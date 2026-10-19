@@ -228,7 +228,31 @@ export interface ContentItem {
 export type MarketingPlatform = 'whatsapp_status' | 'whatsapp_group' | 'email' | 'blog' | 'youtube';
 export type MarketingCtaType  = 'webinar' | 'strategy_call' | 'course' | 'nurture';
 export type MarketingMsgStatus = 'draft' | 'approved' | 'sent';
-export type MarketingKnowledgeCategory = 'products' | 'audience' | 'style' | 'ctas';
+// 'plan' = שורת לוח הגאנט השיווקי (JSON ב-content), לא מוצגת במאגר הידע
+export type MarketingKnowledgeCategory = 'products' | 'audience' | 'style' | 'ctas' | 'plan';
+
+export type MarketingPlanStatus = 'idea' | 'planned' | 'doing' | 'done';
+
+export interface MarketingPlanTrack {
+  id: string;
+  name: string;
+  color: number;   // אינדקס ב-TRACK_COLORS
+}
+
+export interface MarketingPlanItem {
+  id: string;
+  track: string;
+  title: string;
+  start: string;   // YYYY-MM-DD
+  end: string;     // YYYY-MM-DD (כולל)
+  status: MarketingPlanStatus;
+  notes: string;
+}
+
+export interface MarketingPlan {
+  tracks: MarketingPlanTrack[];
+  items: MarketingPlanItem[];
+}
 
 export interface MarketingKnowledge {
   id: string;
