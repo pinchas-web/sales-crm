@@ -1,0 +1,160 @@
+/* לוח גאנט שיווקי — הזמן זורם מימין לשמאל כמו הלוח העברי.
+   שמות הערוצים נעוצים בצד ימין, שני לוחות שנה בכותרת. */
+
+.mp {
+  --mp-label: 180px;
+  --mp-shabbat: rgba(210, 171, 98, .12);
+  --mp-festival: rgba(199, 38, 58, .06);
+  --mp-line: var(--c-border, #E5DDD4);
+  --mp-line-strong: var(--c-border-dark, #CEC4B8);
+  --mp-cream: var(--c-gold-xs, #FDF8EE);
+  --mp-muted: var(--c-text-muted, #6B6057);
+  --mp-ink: var(--c-text, #1C1815);
+  --mp-red: var(--c-primary, #C7263A);
+  --mp-surface: var(--c-surface, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (max-width: 640px) { .mp { --mp-label: 118px; } }
+
+.mp-chart {
+  border: 1px solid var(--mp-line-strong);
+  border-radius: 14px;
+  background: var(--mp-surface);
+  overflow: auto;
+  max-height: 68vh;
+  position: relative;
+  overscroll-behavior: contain;
+}
+.mp-sheet { position: relative; min-width: 100%; }
+.mp-row { display: flex; position: relative; }
+.mp-lab {
+  position: sticky; right: 0; z-index: 4;
+  flex: 0 0 var(--mp-label); width: var(--mp-label);
+  background: var(--mp-surface);
+  border-left: 1px solid var(--mp-line-strong);
+  padding: 0 12px;
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+}
+.mp-tl { position: relative; flex: 0 0 auto; }
+
+.mp-head { position: sticky; top: 0; z-index: 6; background: var(--mp-surface); }
+.mp-head .mp-lab { z-index: 7; font-size: 12px; color: var(--mp-muted); }
+.mp-hrow { height: 30px; border-bottom: 1px solid var(--mp-line); }
+.mp-hm { height: 34px; background: var(--mp-cream); }
+.mp-hm .mp-lab { background: var(--mp-cream); color: var(--mp-ink); font-weight: 600; }
+.mp-hcell {
+  position: absolute; top: 0; bottom: 0;
+  display: flex; align-items: center; padding: 0 8px;
+  border-left: 1px solid var(--mp-line-strong);
+  white-space: nowrap; overflow: hidden;
+}
+.mp-hm .mp-hcell { font-weight: 700; font-size: 17px; color: var(--mp-ink); }
+.mp-hm .mp-hcell small { font-weight: 400; font-size: 12px; color: var(--mp-muted); margin-inline-start: 6px; }
+.mp-gm .mp-hcell { font-size: 13px; color: var(--mp-muted); font-weight: 500; }
+.mp-wk { height: 38px; }
+.mp-wk .mp-hcell {
+  flex-direction: column; align-items: flex-start; justify-content: center;
+  padding: 0 5px; line-height: 1.15; border-left-color: var(--mp-line);
+  font-variant-numeric: tabular-nums;
+}
+.mp-wk .mp-hcell b { font-weight: 600; font-size: 12px; }
+.mp-wk .mp-hcell span { font-size: 11px; color: var(--mp-muted); }
+
+.mp-hol { height: 28px; border-bottom: 1px solid var(--mp-line); }
+.mp-hol:last-child { border-bottom-color: var(--mp-line-strong); }
+.mp-hol .mp-lab { font-size: 12px; color: var(--mp-muted); }
+.mp-ev {
+  position: absolute; top: 4px; height: 20px;
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; white-space: nowrap; padding: 0 6px;
+  border-radius: 4px; max-width: 190px; overflow: hidden; z-index: 1;
+}
+.mp-ev.pt::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 8px; }
+/* מועד רב-יומי: הרקע בגודל הימים, התווית רשאית לחרוג שמאלה */
+.mp-ev.span { background: var(--mp-festival); border-inline-start: 3px solid currentColor; max-width: none; overflow: visible; }
+.mp-ev.span .t { overflow: visible; }
+.mp-ev .t { color: var(--mp-ink); overflow: hidden; text-overflow: ellipsis; }
+.mp-ev.k-j { color: #C7263A; }
+.mp-ev.k-r { color: #B08D44; }
+.mp-ev.k-c { color: #A8234A; }
+.mp-ev.k-g { color: #3D6B73; }
+
+.mp-body { position: relative; }
+.mp-overlay { position: absolute; top: 0; bottom: 0; pointer-events: none; z-index: 0; }
+.mp-overlay .sh { position: absolute; top: 0; bottom: 0; background: var(--mp-shabbat); }
+.mp-overlay .fs { position: absolute; top: 0; bottom: 0; background: var(--mp-festival); }
+.mp-overlay .wl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--mp-line); }
+.mp-overlay .ml { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--mp-line-strong); }
+.mp-overlay .td { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--mp-red); opacity: .85; }
+.mp-todaytag {
+  position: absolute; top: 2px; transform: translateX(50%);
+  background: var(--mp-red); color: #fff; font-size: 11px;
+  padding: 1px 6px; border-radius: 3px; white-space: nowrap; z-index: 3; pointer-events: none;
+}
+
+.mp-trk { border-bottom: 1px solid var(--mp-line); }
+.mp-trk .mp-lab { justify-content: space-between; cursor: pointer; }
+.mp-trk .mp-lab:hover .mp-tname > span { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--mp-line-strong); }
+.mp-tname { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mp-tname > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 10px; display: inline-block; }
+.mp-tcount { font-size: 12px; color: var(--mp-muted); font-variant-numeric: tabular-nums; }
+.mp-trk .mp-tl { cursor: copy; }
+
+.mp-bar {
+  position: absolute; height: 26px; border-radius: 6px;
+  color: #fff; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; padding: 0 9px;
+  white-space: nowrap; overflow: hidden;
+  cursor: grab; touch-action: none; user-select: none; z-index: 2;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+}
+.mp-bar:active { cursor: grabbing; }
+.mp-bar .bt { overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.mp-bar.s-idea { background: transparent !important; border: 1.5px dashed currentColor; box-shadow: none; }
+.mp-bar.s-idea .bt { color: var(--mp-ink); }
+.mp-bar.s-doing { background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.18) 0 6px, transparent 6px 12px); }
+.mp-bar.s-done { opacity: .55; }
+.mp-bar.s-done .bt::before { content: "✓ "; }
+.mp-bar .hd { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
+.mp-bar .hd.r { right: 0; }
+.mp-bar .hd.l { left: 0; }
+.mp-bar.dragging { z-index: 5; box-shadow: 0 4px 16px rgba(0, 0, 0, .25); }
+.mp-bar:focus-visible { outline: 2px solid var(--mp-ink); outline-offset: 2px; }
+.mp-dragtip {
+  position: fixed; z-index: 70; background: var(--mp-ink); color: #fff;
+  font-size: 12px; padding: 4px 8px; border-radius: 5px;
+  pointer-events: none; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+
+.mp-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; color: var(--mp-muted); align-items: center; }
+.mp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mp-lg { width: 22px; height: 12px; border-radius: 3px; display: inline-block; background: #3D6B73; }
+.mp-lg.idea { background: transparent; border: 1.5px dashed #3D6B73; }
+.mp-lg.doing { background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.3) 0 3px, transparent 3px 6px); }
+.mp-lg.done { opacity: .5; }
+.mp-lg.sh { background: var(--mp-shabbat); border: 1px solid var(--mp-line-strong); }
+.mp-lg.fs { background: var(--mp-festival); border: 1px solid var(--mp-line-strong); }
+
+.mp-seg { display: inline-flex; border: 1px solid var(--mp-line-strong); border-radius: 10px; overflow: hidden; background: var(--mp-surface); }
+.mp-seg button { padding: 6px 12px; font-size: 13px; }
+.mp-seg button[aria-pressed="true"] { background: var(--mp-ink); color: #fff; }
+
+.mp-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px; }
+.mp-table th, .mp-table td { text-align: right; padding: 9px 14px; border-bottom: 1px solid var(--mp-line); vertical-align: top; }
+.mp-table th { font-size: 12px; color: var(--mp-muted); font-weight: 600; background: var(--mp-cream); }
+.mp-table tbody tr.it { cursor: pointer; }
+.mp-table tbody tr.it:hover td { background: var(--c-bg, #F7F5F1); }
+.mp-table td.d { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mp-table td.d small { display: block; color: var(--mp-muted); }
+.mp-table tr.sep td { background: var(--c-bg, #F7F5F1); font-weight: 700; padding: 6px 14px; }
+.mp-pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--mp-line-strong); color: var(--mp-muted); white-space: nowrap; }
+.mp-pill.planned { border-color: #3D6B73; color: #3D6B73; }
+.mp-pill.doing { border-color: #B08D44; color: #8a6c2c; }
+.mp-pill.done { background: var(--mp-cream); color: var(--mp-ink); }
+
+.mp-colors { display: flex; gap: 8px; flex-wrap: wrap; }
+.mp-colors button { width: 28px; height: 28px; border-radius: 7px; border: 2px solid transparent; }
+.mp-colors button[aria-pressed="true"] { border-color: var(--mp-ink); box-shadow: inset 0 0 0 2px #fff; }

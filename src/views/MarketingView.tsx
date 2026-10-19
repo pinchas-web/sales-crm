@@ -2,11 +2,13 @@ import { useState } from 'react';
 import type { AppState } from '../types';
 import KnowledgeBasePanel from './marketing/KnowledgeBasePanel';
 import WeeklyMessagesPanel from './marketing/WeeklyMessagesPanel';
+import MarketingPlanPanel from './marketing/MarketingPlanPanel';
 
-type Tab = 'messages' | 'knowledge';
+type Tab = 'messages' | 'plan' | 'knowledge';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'messages',  label: 'מסרים שבועיים', icon: '✨' },
+  { id: 'plan',      label: 'תוכנית שיווק',  icon: '🗓️' },
   { id: 'knowledge', label: 'מאגר ידע',       icon: '🧠' },
 ];
 
@@ -45,6 +47,9 @@ export default function MarketingView({ state, onUpdate }: Props) {
       <div className="flex-1 overflow-y-auto p-4">
         {activeTab === 'messages' && (
           <WeeklyMessagesPanel state={state} onUpdate={onUpdate} />
+        )}
+        {activeTab === 'plan' && (
+          <MarketingPlanPanel state={state} onUpdate={onUpdate} />
         )}
         {activeTab === 'knowledge' && (
           <KnowledgeBasePanel state={state} onUpdate={onUpdate} />

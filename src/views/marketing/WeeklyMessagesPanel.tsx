@@ -221,7 +221,7 @@ export default function WeeklyMessagesPanel({ state, onUpdate }: Props) {
       const res = await fetch('/api/marketing-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ rawContent, ctaType, weekDate: selectedWeek, knowledgeBase: state.marketingKnowledge }),
+        body: JSON.stringify({ rawContent, ctaType, weekDate: selectedWeek, knowledgeBase: state.marketingKnowledge.filter(k => k.category !== 'plan') }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
       const { messages } = await res.json();
