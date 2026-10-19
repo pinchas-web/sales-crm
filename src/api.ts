@@ -9,6 +9,7 @@
  *   POST /api/state  → שמירת AppState עם ולידציית בעלות
  */
 import { createClient } from '@supabase/supabase-js';
+import type { StatePatch } from './sync';
 
 // ── Supabase client ──────────────────────────────────────────────────────────
 // VITE_* משתנים נחשפים לדפדפן — anon key בלבד (לא service role!)
@@ -102,40 +103,49 @@ export async function apiRegister(params: {
 }
 
 /**
- * שומר את ה-AppState לשרת.
+ * שומר לשרת רק את מה שהשתנה (ראו src/sync.ts).
  * הServerless function מאמת בעלות — נציג לא יכול לשמור נתונים של אחרים.
  *
  * NOTE: base64 data URLs נגרעים מ-thumbnails לפני השליחה —
  * הם יכולים להיות עשרות MB ולחרוג מה-4.5MB limit של Vercel.
  * thumbnails נשמרים ב-Supabase Storage ומוחלפים ב-URLs קצרים ב-handleFilesAccepted.
  */
-export async function apiSaveState(state: unknown): Promise<void> {
-  console.log('[CRM] apiSaveState called — sending POST /api/state');
+export class SaveError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
 
-  // Strip base64 data URLs from thumbnails — keep only http/https Storage URLs
+export async function apiSavePatch(patch: StatePatch): Promise<void> {
   type CI = Record<string, unknown> & { thumbnails?: string[] };
-  const s = state as Record<string, unknown>;
-  const contentItems = ((s.contentItems ?? []) as CI[]).map(ci => ({
-    ...ci,
-    thumbnails: (ci.thumbnails ?? []).filter(
+  const stripThumbs = (item: CI) => ({
+    ...item,
+    thumbnails: (item.thumbnails ?? []).filter(
       (t): t is string => typeof t === 'string' && !t.startsWith('data:'),
     ),
-  }));
+  });
+  const ci = patch.changes.contentItems;
+  const changes = ci
+    ? {
+        ...patch.changes,
+        contentItems: {
+          ...ci,
+          upsert: (ci.upsert as CI[]).map(stripThumbs),
+          update: (ci.update as CI[]).map(item => ('thumbnails' in item ? stripThumbs(item) : item)),
+        },
+      }
+    : patch.changes;
 
   const res = await fetch('/api/state', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ ...s, contentItems }),
+    body: JSON.stringify({ patch: true, ...patch, changes }),
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     console.error(`[CRM] POST /api/state FAILED — ${res.status} ${res.statusText}`, body);
-    throw new Error(`CRM save failed: ${res.status} ${res.statusText}`);
+    throw new SaveError(res.status, `CRM save failed: ${res.status} ${res.statusText}`);
   }
-
-  const result = await res.json().catch(() => ({}));
-  console.log('[CRM] apiSaveState ✓ success', result);
 }
 
 /**

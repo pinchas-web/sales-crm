@@ -24,7 +24,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uid     = crmUser.crm_user_id;
 
     if (req.method === 'GET')  return handleGet(res, uid, isAdmin);
-    if (req.method === 'POST') return handlePost(req, res, uid, isAdmin);
+    if (req.method === 'POST') {
+      // לקוח ישן ששולח את כל ה-state — עלול למחוק נתונים שנוספו ע"י אחרים. חוסמים.
+      if (!req.body?.patch) {
+        return res.status(409).json({ error: 'outdated_client', message: 'גרסה חדשה של המערכת זמינה — רעננו את הדף' });
+      }
+      return handlePatch(req, res, uid, isAdmin);
+    }
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     console.error('[CRM] UNHANDLED EXCEPTION in handler:', err);
@@ -431,316 +437,197 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// POST handler
+// POST handler — שמירת שינויים בלבד (patch)
 // ════════════════════════════════════════════════════════════════════
+//
+// הלקוח שולח לכל אוסף: שורות חדשות (upsert), רק השדות שהשתנו בשורות קיימות
+// (update), ו-ids שנמחקו (delete); ובנוסף מפתחות קונפיגורציה שהשתנו.
+// אף שורה לא נמחקת רק כי לא נשלחה, ועדכון ממוזג לתוך הגרסה העדכנית בשרת —
+// כך שני משתמשים שעורכים במקביל לא דורסים ולא מוחקים זה לזה.
 
-async function handlePost(req: VercelRequest, res: VercelResponse, uid: string, isAdmin: boolean) {
-  const incoming = req.body;
-  if (!incoming || typeof incoming !== 'object') {
-    return res.status(400).json({ error: 'Invalid request body' });
+type Change = { upsert?: Row[]; update?: Row[]; delete?: string[] };
+
+const CONFIG_COLUMNS: Record<string, string> = {
+  users:             'users',
+  statuses:          'statuses',
+  products:          'products',
+  dropdownOptions:   'dropdown_options',
+  customFields:      'custom_fields',
+  labels:            'labels',
+  navConfig:         'nav_config',
+  salesTargets:      'sales_targets',
+  automationRules:   'automation_rules',
+  tableColumnPrefs:  'table_column_prefs',
+  dailySummaryEmail: 'daily_summary_email',
+};
+const CONFIG_ID = '00000000-0000-0000-0000-000000000001';
+
+const same = (r: Row) => r;
+
+interface CollectionSpec {
+  table: string;
+  fromDb: (r: Row) => Row;
+  toDb: (r: Row) => Row;
+  /** האם המשתמש רשאי לכתוב את השורה (אחרי מיזוג). existing = הגרסה בשרת, אם יש */
+  canWrite: (row: Row, existing?: Row) => boolean;
+  /** האם המשתמש רשאי למחוק את השורה הקיימת */
+  canDelete: (existing: Row) => boolean;
+}
+
+async function fetchExisting(table: string, ids: string[]): Promise<Map<string, Row>> {
+  if (!ids.length) return new Map();
+  const { data, error } = await supabaseAdmin.from(table).select('*').in('id', ids);
+  if (error) throw new Error(`${table} select: ${error.message}`);
+  return new Map((data ?? []).map((r: Row) => [r.id as string, r]));
+}
+
+async function applyCollection(spec: CollectionSpec, change: Change | undefined): Promise<number> {
+  if (!change) return 0;
+  const upserts = change.upsert ?? [];
+  const updates = change.update ?? [];
+  const deletes = change.delete ?? [];
+  const existing = await fetchExisting(spec.table, [...upserts, ...updates].map(r => r.id as string).concat(deletes));
+  let refused = 0;
+
+  const rows: Row[] = [];
+  for (const r of upserts) {
+    const ex = existing.get(r.id as string);
+    const exFront = ex ? spec.fromDb(ex) : undefined;
+    if (spec.canWrite(r, exFront)) rows.push(spec.toDb(r)); else refused++;
+  }
+  for (const partial of updates) {
+    const ex = existing.get(partial.id as string);
+    if (!ex) continue;                       // נמחקה בינתיים ע"י מישהו אחר — לא מחיה אותה
+    const exFront = spec.fromDb(ex);
+    const merged = { ...exFront, ...partial };
+    if (spec.canWrite(merged, exFront)) rows.push(spec.toDb(merged)); else refused++;
+  }
+  if (rows.length) {
+    const { error } = await supabaseAdmin.from(spec.table).upsert(rows);
+    if (error) throw new Error(`${spec.table} upsert: ${error.message}`);
+    console.log(`[CRM] ${spec.table} ✓ wrote ${rows.length}`);
   }
 
-  // ── ולידציית בעלות לנציגים ───────────────────────────────────────────────
-  if (!isAdmin) {
-    const illegalLead = (incoming.leads ?? []).find(
-      (l: Row) => l.assigned_to !== uid
-    );
-    if (illegalLead) {
+  const delIds = deletes.filter(id => { const ex = existing.get(id); return ex && spec.canDelete(spec.fromDb(ex)); });
+  refused += deletes.filter(id => existing.has(id)).length - delIds.length;
+  if (delIds.length) {
+    const { error } = await supabaseAdmin.from(spec.table).delete().in('id', delIds);
+    if (error) throw new Error(`${spec.table} delete: ${error.message}`);
+    console.log(`[CRM] ${spec.table} ✓ deleted ${delIds.length}`);
+  }
+  if (refused) console.warn(`[CRM] ${spec.table} — refused ${refused} change(s) (permissions)`);
+  return refused;
+}
+
+async function handlePatch(req: VercelRequest, res: VercelResponse, uid: string, isAdmin: boolean) {
+  const body = req.body as { changes?: Record<string, Change>; config?: Record<string, unknown>; marketingDeletedWeeks?: string[] };
+  const changes = body.changes ?? {};
+  const summary = Object.entries(changes)
+    .map(([k, c]) => `${k}+${c.upsert?.length ?? 0}~${c.update?.length ?? 0}-${c.delete?.length ?? 0}`).join(' ');
+  console.log(`[CRM PATCH] uid=${uid} isAdmin=${isAdmin} ${summary} config=${Object.keys(body.config ?? {}).join(',')}`);
+
+  try {
+    // ── קונפיגורציה (admin בלבד) — רק המפתחות שהשתנו ──────────────────────
+    const cfgKeys = Object.keys(body.config ?? {}).filter(k => k in CONFIG_COLUMNS);
+    if (isAdmin && cfgKeys.length) {
+      const update: Row = { id: CONFIG_ID, updated_at: new Date().toISOString() };
+      for (const k of cfgKeys) update[CONFIG_COLUMNS[k]] = body.config![k] ?? (k === 'dailySummaryEmail' ? '' : null);
+      const { data: existing } = await supabaseAdmin.from('crm_config').select('id').eq('id', CONFIG_ID).maybeSingle();
+      const { error } = existing
+        ? await supabaseAdmin.from('crm_config').update(update).eq('id', CONFIG_ID)
+        : await supabaseAdmin.from('crm_config').insert(update);
+      if (error) throw new Error(`crm_config: ${error.message}`);
+      console.log(`[CRM] crm_config ✓ ${cfgKeys.join(',')}`);
+    }
+
+    // נציג: רק לידים שמשויכים אליו (גם לפני וגם אחרי השינוי)
+    const ownRow = (field: string) => (row: Row, ex?: Row) =>
+      isAdmin || (row[field] === uid && (!ex || ex[field] === uid));
+    let refused = await applyCollection({
+      table: 'leads', fromDb: dbToLead, toDb: leadToDb,
+      canWrite: ownRow('assigned_to'), canDelete: ex => isAdmin || ex.assigned_to === uid,
+    }, changes.leads);
+    if (refused && !isAdmin) {
       return res.status(403).json({ error: 'Cannot modify leads assigned to others' });
     }
-  }
 
-  console.log(`[CRM POST] uid=${uid} isAdmin=${isAdmin} | leads=${(incoming.leads??[]).length} tasks=${(incoming.tasks??[]).length} activities=${(incoming.activities??[]).length} clients=${(incoming.clients??[]).length} chat=${(incoming.chatMessages??[]).length} notes=${(incoming.pinnedNotes??[]).length}`);
-
-  // ── קונפיגורציה (admin בלבד) ──────────────────────────────────────────────
-  if (isAdmin) {
-    const { error: cfgErr } = await supabaseAdmin.from('crm_config').upsert({
-      id:                  '00000000-0000-0000-0000-000000000001',
-      users:               incoming.users              ?? [],
-      statuses:            incoming.statuses           ?? [],
-      products:            incoming.products           ?? [],
-      dropdown_options:    incoming.dropdownOptions    ?? {},
-      custom_fields:       incoming.customFields       ?? [],
-      labels:              incoming.labels             ?? {},
-      nav_config:          incoming.navConfig          ?? [],
-      sales_targets:       incoming.salesTargets       ?? {},
-      automation_rules:    incoming.automationRules    ?? [],
-      table_column_prefs:  incoming.tableColumnPrefs   ?? {},
-      daily_summary_email: incoming.dailySummaryEmail  ?? '',
-      updated_at:          new Date().toISOString(),
-    });
-    if (cfgErr) console.error('[CRM] crm_config upsert ERROR:', cfgErr);
-    else console.log('[CRM] crm_config ✓ saved');
-  }
-
-  // ── לידים: upsert + delete ────────────────────────────────────────────────
-  const leadsToSave: Row[] = isAdmin
-    ? incoming.leads ?? []
-    : (incoming.leads ?? []).filter((l: Row) => l.assigned_to === uid);
-
-  if (leadsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('leads')
-      .upsert(leadsToSave.map(leadToDb));
-    if (error) console.error('[CRM] leads upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] leads ✓ upserted ${leadsToSave.length} rows`);
-  } else {
-    console.log('[CRM] leads — nothing to upsert');
-  }
-
-  // מחיקת לידים שנמחקו
-  const existingLeadsQ = supabaseAdmin.from('leads').select('id');
-  const { data: existingLeads = [], error: elErr } = await (isAdmin
-    ? existingLeadsQ
-    : existingLeadsQ.eq('assigned_to', uid));
-  if (elErr) console.error('[CRM] leads select ERROR:', elErr);
-  const incomingLeadIds = new Set((incoming.leads ?? []).map((l: Row) => l.id));
-  const leadsToDelete = (existingLeads ?? [])
-    .filter((l: Row) => !incomingLeadIds.has(l.id))
-    .map((l: Row) => l.id);
-  if (leadsToDelete.length > 0) {
-    const { error: delErr } = await supabaseAdmin.from('leads').delete().in('id', leadsToDelete);
-    if (delErr) console.error('[CRM] leads delete ERROR:', delErr);
-    else console.log(`[CRM] leads ✓ deleted ${leadsToDelete.length} rows`);
-  }
-
-  // ── פעילויות: upsert + delete ─────────────────────────────────────────────
-  const myLeadIds = new Set(leadsToSave.map(l => l.id));
-
-  const activitiesToSave = (incoming.activities ?? []).filter(
-    (a: Row) => myLeadIds.has(a.lead_id)
-  );
-  if (activitiesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('activities')
-      .upsert(activitiesToSave);
-    if (error) console.error('[CRM] activities upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] activities ✓ upserted ${activitiesToSave.length} rows`);
-  } else {
-    console.log('[CRM] activities — nothing to upsert');
-  }
-
-  // מחיקת פעילויות שנמחקו
-  if (myLeadIds.size > 0) {
-    const { data: existingActs = [] } = await supabaseAdmin
-      .from('activities').select('id').in('lead_id', [...myLeadIds]);
-    const incomingActIds = new Set((incoming.activities ?? []).map((a: Row) => a.id));
-    const actsToDelete = (existingActs ?? [])
-      .filter((a: Row) => !incomingActIds.has(a.id))
-      .map((a: Row) => a.id);
-    if (actsToDelete.length > 0) {
-      const { error } = await supabaseAdmin.from('activities').delete().in('id', actsToDelete);
-      if (error) console.error('[CRM] activities delete ERROR:', error);
-      else console.log(`[CRM] activities ✓ deleted ${actsToDelete.length} rows`);
+    let mine: Set<string> | null = null;
+    if (!isAdmin) {
+      const { data, error } = await supabaseAdmin.from('leads').select('id').eq('assigned_to', uid);
+      if (error) throw new Error(`leads select: ${error.message}`);
+      mine = new Set((data ?? []).map((l: Row) => l.id as string));
     }
-  }
+    const ownsLead = (leadId: unknown) => isAdmin || (typeof leadId === 'string' && mine!.has(leadId));
 
-  // ── משימות: upsert + delete ───────────────────────────────────────────────
-  const tasksToSave: Row[] = isAdmin
-    ? incoming.tasks ?? []
-    : (incoming.tasks ?? []).filter((t: Row) => t.assigned_to === uid);
+    refused += await applyCollection({
+      table: 'activities', fromDb: same, toDb: same,
+      canWrite: (r, ex) => ownsLead(r.lead_id) && (!ex || ownsLead(ex.lead_id)),
+      canDelete: ex => ownsLead(ex.lead_id),
+    }, changes.activities);
 
-  if (tasksToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('tasks')
-      .upsert(tasksToSave);
-    if (error) console.error('[CRM] tasks upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] tasks ✓ upserted ${tasksToSave.length} rows`);
-  } else {
-    console.log('[CRM] tasks — nothing to upsert');
-  }
+    refused += await applyCollection({
+      table: 'tasks', fromDb: same, toDb: same,
+      canWrite: ownRow('assigned_to'), canDelete: ex => isAdmin || ex.assigned_to === uid,
+    }, changes.tasks);
 
-  // מחיקת משימות שנמחקו
-  const existingTasksQ = supabaseAdmin.from('tasks').select('id');
-  const { data: existingTasks = [], error: etErr } = await (isAdmin
-    ? existingTasksQ
-    : existingTasksQ.eq('assigned_to', uid));
-  if (etErr) console.error('[CRM] tasks select ERROR:', etErr);
-  const incomingTaskIds = new Set((incoming.tasks ?? []).map((t: Row) => t.id));
-  const tasksToDelete = (existingTasks ?? [])
-    .filter((t: Row) => !incomingTaskIds.has(t.id))
-    .map((t: Row) => t.id);
-  if (tasksToDelete.length > 0) {
-    const { error: delErr } = await supabaseAdmin.from('tasks').delete().in('id', tasksToDelete);
-    if (delErr) console.error('[CRM] tasks delete ERROR:', delErr);
-    else console.log(`[CRM] tasks ✓ deleted ${tasksToDelete.length} rows`);
-  }
+    refused += await applyCollection({
+      table: 'clients', fromDb: dbToClient, toDb: clientToDb,
+      canWrite: (r, ex) => ownsLead(r.leadId) && (!ex || ownsLead(ex.leadId)),
+      canDelete: () => isAdmin,
+    }, changes.clients);
 
-  // ── לקוחות: upsert ────────────────────────────────────────────────────────
-  const clientsToSave = (incoming.clients ?? []).filter(
-    (c: Row) => isAdmin || myLeadIds.has(c.leadId)
-  );
-  if (clientsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('clients')
-      .upsert(clientsToSave.map(clientToDb));
-    if (error) console.error('[CRM] clients upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] clients ✓ upserted ${clientsToSave.length} rows`);
-  } else {
-    console.log('[CRM] clients — nothing to upsert');
-  }
-
-  // ── הודעות צ'אט: upsert ───────────────────────────────────────────────────
-  const chatToSave = (incoming.chatMessages ?? []).filter(
-    (m: Row) => isAdmin || m.fromUserId === uid
-  );
-  if (chatToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('chat_messages')
-      .upsert(chatToSave.map(chatToDb));
-    if (error) console.error('[CRM] chat_messages upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] chat_messages ✓ upserted ${chatToSave.length} rows`);
-  } else {
-    console.log('[CRM] chat_messages — nothing to upsert');
-  }
-
-  // ── פתקיות: upsert + delete ───────────────────────────────────────────────
-  const notesToSave = (incoming.pinnedNotes ?? []).filter(
-    (n: Row) => isAdmin || n.userId === uid
-  );
-  if (notesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('pinned_notes')
-      .upsert(notesToSave.map(noteToDb));
-    if (error) console.error('[CRM] pinned_notes upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] pinned_notes ✓ upserted ${notesToSave.length} rows`);
-  } else {
-    console.log('[CRM] pinned_notes — nothing to upsert');
-  }
-
-  // מחיקת פתקיות שנמחקו (רק שלי)
-  const { data: existingNotes = [] } = await supabaseAdmin
-    .from('pinned_notes').select('id').eq('user_id', uid);
-  const incomingNoteIds = new Set(
-    (incoming.pinnedNotes ?? [])
-      .filter((n: Row) => isAdmin || n.userId === uid)
-      .map((n: Row) => n.id)
-  );
-  const notesToDelete = (existingNotes ?? [])
-    .filter((n: Row) => !incomingNoteIds.has(n.id))
-    .map((n: Row) => n.id);
-  if (notesToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('pinned_notes').delete().in('id', notesToDelete);
-    if (error) console.error('[CRM] pinned_notes delete ERROR:', error);
-    else console.log(`[CRM] pinned_notes ✓ deleted ${notesToDelete.length} rows`);
-  }
-
-  // ── קורסים: upsert + delete ───────────────────────────────────────────────
-  const coursesToSave: Row[] = incoming.courses ?? [];
-  if (coursesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('courses')
-      .upsert(coursesToSave.map(courseToDb));
-    if (error) console.error('[CRM] courses upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] courses ✓ upserted ${coursesToSave.length} rows`);
-  }
-  // מחיקת קורסים שנמחקו
-  const { data: existingCourses = [] } = await supabaseAdmin.from('courses').select('id');
-  const incomingCourseIds = new Set((incoming.courses ?? []).map((c: Row) => c.id));
-  const coursesToDelete = (existingCourses ?? [])
-    .filter((c: Row) => !incomingCourseIds.has(c.id))
-    .map((c: Row) => c.id);
-  if (coursesToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('courses').delete().in('id', coursesToDelete);
-    if (error) console.error('[CRM] courses delete ERROR:', error);
-    else console.log(`[CRM] courses ✓ deleted ${coursesToDelete.length} rows`);
-  }
-
-  // ── שיעורים: upsert + delete ──────────────────────────────────────────────
-  const lessonsToSave: Row[] = incoming.lessons ?? [];
-  if (lessonsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('lessons')
-      .upsert(lessonsToSave.map(lessonToDb));
-    if (error) console.error('[CRM] lessons upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] lessons ✓ upserted ${lessonsToSave.length} rows`);
-  }
-  const { data: existingLessons = [] } = await supabaseAdmin.from('lessons').select('id');
-  const incomingLessonIds = new Set((incoming.lessons ?? []).map((l: Row) => l.id));
-  const lessonsToDelete = (existingLessons ?? [])
-    .filter((l: Row) => !incomingLessonIds.has(l.id))
-    .map((l: Row) => l.id);
-  if (lessonsToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('lessons').delete().in('id', lessonsToDelete);
-    if (error) console.error('[CRM] lessons delete ERROR:', error);
-    else console.log(`[CRM] lessons ✓ deleted ${lessonsToDelete.length} rows`);
-  }
-
-  // ── פריטי תוכן: upsert + delete ──────────────────────────────────────────
-  const contentItemsToSave: Row[] = incoming.contentItems ?? [];
-  if (contentItemsToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('content_items')
-      .upsert(contentItemsToSave.map(contentItemToDb));
-    if (error) console.error('[CRM] content_items upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] content_items ✓ upserted ${contentItemsToSave.length} rows`);
-  }
-  const { data: existingContent = [] } = await supabaseAdmin.from('content_items').select('id');
-  const incomingContentIds = new Set((incoming.contentItems ?? []).map((ci: Row) => ci.id));
-  const contentToDelete = (existingContent ?? [])
-    .filter((ci: Row) => !incomingContentIds.has(ci.id))
-    .map((ci: Row) => ci.id);
-  if (contentToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('content_items').delete().in('id', contentToDelete);
-    if (error) console.error('[CRM] content_items delete ERROR:', error);
-    else console.log(`[CRM] content_items ✓ deleted ${contentToDelete.length} rows`);
-  }
-
-  // ── מאגר ידע שיווקי: upsert + delete ────────────────────────────────────────
-  const knowledgeToSave: Row[] = incoming.marketingKnowledge ?? [];
-  if (knowledgeToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('marketing_knowledge')
-      .upsert(knowledgeToSave.map(marketingKnowledgeToDb));
-    if (error) console.error('[CRM] marketing_knowledge upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] marketing_knowledge ✓ upserted ${knowledgeToSave.length} rows`);
-  }
-  const { data: existingKnowledge = [] } = await supabaseAdmin.from('marketing_knowledge').select('id');
-  const incomingKnowledgeIds = new Set((incoming.marketingKnowledge ?? []).map((k: Row) => k.id));
-  const knowledgeToDelete = (existingKnowledge ?? [])
-    .filter((k: Row) => !incomingKnowledgeIds.has(k.id))
-    .map((k: Row) => k.id);
-  if (knowledgeToDelete.length > 0) {
-    const { error } = await supabaseAdmin.from('marketing_knowledge').delete().in('id', knowledgeToDelete);
-    if (error) console.error('[CRM] marketing_knowledge delete ERROR:', error);
-    else console.log(`[CRM] marketing_knowledge ✓ deleted ${knowledgeToDelete.length} rows`);
-  }
-
-  // ── מסרים שיווקיים: upsert + delete (week-scoped) ───────────────────────────
-  // מחיקה מפורשת של שבועות שנמחקו ע"י המשתמש
-  const deletedWeeks: string[] = incoming.marketingDeletedWeeks ?? [];
-  if (deletedWeeks.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('marketing_messages').delete().in('week_date', deletedWeeks);
-    if (error) console.error('[CRM] marketing_messages explicit-delete ERROR:', error);
-    else console.log(`[CRM] marketing_messages ✓ deleted weeks: ${deletedWeeks.join(', ')}`);
-  }
-
-  const messagesToSave: Row[] = incoming.marketingMessages ?? [];
-  if (messagesToSave.length > 0) {
-    const { error } = await supabaseAdmin
-      .from('marketing_messages')
-      .upsert(messagesToSave.map(marketingMessageToDb));
-    if (error) console.error('[CRM] marketing_messages upsert ERROR:', JSON.stringify(error));
-    else console.log(`[CRM] marketing_messages ✓ upserted ${messagesToSave.length} rows`);
-  }
-
-  // מחיקה רק בתוך שבועות שמיוצגים ב-incoming — לא לנגוע בשבועות שנכתבו ע"י crm_sync.py
-  const incomingWeeks = [...new Set((messagesToSave).map((m: Row) => m.weekDate))];
-  if (incomingWeeks.length > 0) {
-    const { data: existingInWeeks = [] } = await supabaseAdmin
-      .from('marketing_messages').select('id').in('week_date', incomingWeeks);
-    const incomingMessageIds = new Set(messagesToSave.map((m: Row) => m.id));
-    const messagesToDelete = (existingInWeeks ?? [])
-      .filter((m: Row) => !incomingMessageIds.has(m.id))
-      .map((m: Row) => m.id);
-    if (messagesToDelete.length > 0) {
-      const { error } = await supabaseAdmin.from('marketing_messages').delete().in('id', messagesToDelete);
-      if (error) console.error('[CRM] marketing_messages delete ERROR:', error);
-      else console.log(`[CRM] marketing_messages ✓ deleted ${messagesToDelete.length} stale rows`);
+    // צ'אט: הכותב (או מנהל) עורך הודעה; כל מי שרואה הודעה רק מסמן אותה כנקראה.
+    // read_by תמיד מתאחד עם מה שבשרת — שני קוראים לא דורסים זה את זה.
+    const chat = changes.chatMessages;
+    if (chat) {
+      const partials = [...(chat.upsert ?? []), ...(chat.update ?? [])];
+      const existing = await fetchExisting('chat_messages', partials.map(m => m.id as string));
+      const rows: Row[] = [];
+      for (const m of partials) {
+        const ex = existing.get(m.id as string);
+        if (!ex) {
+          if (chat.upsert?.includes(m) && (isAdmin || m.fromUserId === uid)) rows.push(chatToDb(m));
+          continue;
+        }
+        const exFront = dbToChat(ex);
+        const canEdit = isAdmin || exFront.fromUserId === uid;
+        const canSee  = canEdit || exFront.toUserId == null || exFront.toUserId === uid;
+        if (!canSee) continue;
+        const incomingRead: string[] = Array.isArray(m.readBy) ? m.readBy as string[] : [];
+        const readBy = [...new Set([...(exFront.readBy as string[]), ...(canEdit ? incomingRead : incomingRead.filter(r => r === uid))])];
+        rows.push(chatToDb(canEdit ? { ...exFront, ...m, readBy } : { ...exFront, readBy }));
+      }
+      if (rows.length) {
+        const { error } = await supabaseAdmin.from('chat_messages').upsert(rows);
+        if (error) throw new Error(`chat_messages upsert: ${error.message}`);
+      }
     }
-  }
 
-  console.log('[CRM POST] ✓ done');
-  return res.status(200).json({ saved: true });
+    refused += await applyCollection({
+      table: 'pinned_notes', fromDb: dbToNote, toDb: noteToDb,
+      canWrite: (r, ex) => (isAdmin || r.userId === uid) && (!ex || isAdmin || ex.userId === uid),
+      canDelete: ex => ex.userId === uid,
+    }, changes.pinnedNotes);
+
+    // קורסים, שיווק — משותפים לכל המשתמשים (כמו קודם)
+    const open = { canWrite: () => true, canDelete: () => true };
+    await applyCollection({ table: 'courses', fromDb: dbToCourse, toDb: courseToDb, ...open }, changes.courses);
+    await applyCollection({ table: 'lessons', fromDb: dbToLesson, toDb: lessonToDb, ...open }, changes.lessons);
+    await applyCollection({ table: 'content_items', fromDb: dbToContentItem, toDb: contentItemToDb, ...open }, changes.contentItems);
+    await applyCollection({ table: 'marketing_knowledge', fromDb: dbToMarketingKnowledge, toDb: marketingKnowledgeToDb, ...open }, changes.marketingKnowledge);
+
+    const deletedWeeks = body.marketingDeletedWeeks ?? [];
+    if (deletedWeeks.length) {
+      const { error } = await supabaseAdmin.from('marketing_messages').delete().in('week_date', deletedWeeks);
+      if (error) throw new Error(`marketing_messages weeks: ${error.message}`);
+      console.log(`[CRM] marketing_messages ✓ deleted weeks: ${deletedWeeks.join(', ')}`);
+    }
+    await applyCollection({ table: 'marketing_messages', fromDb: dbToMarketingMessage, toDb: marketingMessageToDb, ...open }, changes.marketingMessages);
+
+    console.log(`[CRM PATCH] ✓ done${refused ? ` (refused ${refused})` : ''}`);
+    return res.status(200).json({ saved: true, refused });
+  } catch (err) {
+    console.error('[CRM PATCH] ERROR:', err);
+    return res.status(500).json({ error: 'Save failed', details: String(err) });
+  }
 }

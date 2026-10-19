@@ -5,7 +5,8 @@
  */
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, apiLoadState, apiSaveState } from './api';
+import { supabase, apiLoadState, apiSavePatch, SaveError } from './api';
+import { diffState, emptyBase, isEmptyPatch, rebase, snapshot } from './sync';
 import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, PinnedNote, CustomField, Course, Lesson, ContentItem } from './types';
 import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
@@ -202,6 +203,15 @@ export default function App() {
   const [pendingOnboarding, setPendingOnboarding] = useState<Lead | null>(null);
   const [loading, setLoading]                 = useState(true);
   const [viewAsId, setViewAsId]               = useState<string | null>(null);
+  const [saveStatus, setSaveStatus]           = useState<'saved' | 'saving' | 'error'>('saved');
+
+  // סנכרון — ראו flushSave / refreshFromServer
+  const syncedRef            = useRef<AppState | null>(null);
+  const latestRef            = useRef<AppState>(SEED_STATE);
+  const savingRef            = useRef(false);
+  const saveEpochRef         = useRef(0);
+  const saveTimerRef         = useRef<number | undefined>(undefined);
+  const needsHardRefreshRef  = useRef(false);
 
   // טעינה ראשונית מ-API (רק כשיש session)
   const didLoad = useRef(false);
@@ -211,7 +221,15 @@ export default function App() {
     apiLoadState()
       .then(data => {
         setAuthNotice('');
-        if (data) setState(mergeState(data as Partial<AppState>));
+        if (data) {
+          const loaded = mergeState(data as Partial<AppState>);
+          syncedRef.current = snapshot(loaded);
+          latestRef.current = loaded;
+          setState(loaded);
+        } else {
+          // הפעלה ראשונה — אין כלום בשרת, אז כל ה-seed ייחשב כשינוי וישמר
+          syncedRef.current = emptyBase(SEED_STATE);
+        }
       })
       .catch(async err => {
         console.error('CRM: failed to load state', err);
@@ -221,7 +239,7 @@ export default function App() {
         }
       })
       .finally(() => setLoading(false));
-  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session]);
 
   // איפוס כשמשתמש מתנתק
   useEffect(() => {
@@ -229,15 +247,93 @@ export default function App() {
       setState(SEED_STATE);
       setLoading(true);
       didLoad.current = false;
+      syncedRef.current = null;
     }
   }, [session]);
 
-  // שמירה אוטומטית בכל שינוי state (או כשהטעינה מסתיימת)
+  // ── סנכרון: שמירת שינויים בלבד + רענון תקופתי (ראו src/sync.ts) ──────────
+  // syncedRef = מה שהשרת יודע. שומרים רק את ההפרש בינו לבין ה-state,
+  // ומושכים שינויים של משתמשים אחרים כל 10 שניות ובחזרה ללשונית.
+  latestRef.current = state;
+
+  const flushSave = useCallback(async () => {
+    if (savingRef.current || !syncedRef.current) return;
+    const cur = latestRef.current;
+    const patch = diffState(syncedRef.current, cur);
+    if (isEmptyPatch(patch)) { setSaveStatus('saved'); return; }
+    savingRef.current = true;
+    setSaveStatus('saving');
+    try {
+      await apiSavePatch(patch);
+      syncedRef.current = snapshot(cur);
+      saveEpochRef.current++;
+      setSaveStatus('saved');
+      if (patch.marketingDeletedWeeks?.length) setState(s => ({ ...s, marketingDeletedWeeks: [] }));
+    } catch (err) {
+      console.error('[CRM] save FAILED:', err);
+      setSaveStatus('error');
+      const status = err instanceof SaveError ? err.status : 0;
+      if (status >= 400 && status < 500 && status !== 401 && status !== 429) {
+        // השרת דחה את השינוי (למשל הרשאות) — לא מנסים שוב; טוענים מחדש את מצב השרת
+        syncedRef.current = snapshot(cur);
+        needsHardRefreshRef.current = true;
+      }
+    } finally {
+      savingRef.current = false;
+    }
+    if (needsHardRefreshRef.current) { void refreshFromServer(); return; }
+    // שינויים שנוספו בזמן השמירה, או ניסיון חוזר אחרי שגיאת רשת
+    if (syncedRef.current && !isEmptyPatch(diffState(syncedRef.current, latestRef.current))) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => { void flushSave(); }, 3000);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshFromServer = useCallback(async () => {
+    if (savingRef.current || !syncedRef.current) return;
+    const epoch = saveEpochRef.current;
+    let data: unknown;
+    try { data = await apiLoadState(); } catch (err) { console.error('[CRM] refresh FAILED:', err); return; }
+    // שמירה שהתחילה בזמן הטעינה — התשובה עלולה להיות ישנה, נחכה לרענון הבא
+    if (!data || savingRef.current || epoch !== saveEpochRef.current || !syncedRef.current) return;
+    const server = mergeState(data as Partial<AppState>);
+    const hard = needsHardRefreshRef.current;
+    needsHardRefreshRef.current = false;
+    const next = hard ? server : rebase(server, syncedRef.current, latestRef.current);
+    syncedRef.current = snapshot(server);
+    latestRef.current = next;
+    setState(next);
+  }, []);
+
+  // שמירה (debounce קצר) בכל שינוי state
   useEffect(() => {
     if (loading || !session) return;
-    console.log('[CRM] state changed — triggering save. leads:', state.leads.length, 'tasks:', state.tasks.length, 'activities:', state.activities.length);
-    apiSaveState(state).catch(err => console.error('[CRM] save FAILED:', err));
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => { void flushSave(); }, 400);
   }, [state, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // רענון תקופתי + בחזרה ללשונית
+  useEffect(() => {
+    if (loading || !session) return;
+    const tick = () => { if (!document.hidden) void refreshFromServer(); };
+    const id = window.setInterval(tick, 10000);
+    window.addEventListener('focus', tick);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('focus', tick);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [loading, session, refreshFromServer]);
+
+  // אזהרה לפני סגירה כשיש שינויים שעוד לא נשמרו
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (syncedRef.current && !isEmptyPatch(diffState(syncedRef.current, latestRef.current))) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Run no_activity automations on mount
   useEffect(() => {
@@ -633,6 +729,9 @@ export default function App() {
             })}
           </nav>
           {/* UserBadge */}
+          <span className="text-[11px] text-white/70 whitespace-nowrap" title={saveStatus === 'error' ? 'השמירה נכשלה — ננסה שוב אוטומטית' : undefined}>
+            {saveStatus === 'saving' ? 'שומר…' : saveStatus === 'error' ? '⚠️ לא נשמר' : '✓ נשמר'}
+          </span>
           <UserBadge state={state} />
         </div>
       </header>
