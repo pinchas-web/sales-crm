@@ -1,0 +1,6 @@
+project_id = "sales-crm"
+
+[functions.mcp]
+# MCP OAuth bearer tokens are verified by withOAuthProtectedResource and
+# withSupabase inside the function. Supabase's legacy JWT gate must stay off.
+verify_jwt = false
