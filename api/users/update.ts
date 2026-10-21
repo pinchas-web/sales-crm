@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateRequest } from '../_lib/auth';
 import { supabaseAdmin } from '../_lib/supabaseAdmin';
+import { isRole } from '../_lib/permissions';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -13,15 +14,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { crm_user_id, email, role } = req.body as {
     crm_user_id: string;
     email?: string;
-    role?: 'admin' | 'salesperson';
+    role?: string;
   };
 
   if (!crm_user_id) return res.status(400).json({ error: 'Missing crm_user_id' });
-  if (role && !['admin', 'salesperson'].includes(role)) {
+  if (role && !isRole(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
 
-  const patch: { email?: string; role?: 'admin' | 'salesperson' } = {};
+  const patch: { email?: string; role?: string } = {};
   const normalizedEmail = email?.trim().toLowerCase();
   if (normalizedEmail) patch.email = normalizedEmail;
   if (role) patch.role = role;

@@ -6,6 +6,7 @@ import { useState, useMemo } from 'react';
 import type { AppState, Task, PinnedNote } from '../types';
 import { TODAY, greeting, getL, getHotLeads, calcCommission, openGoogleCalendar, openWhatsApp, timeAgo, NOTE_COLORS, uid } from '../utils';
 import { Btn, ScoreBadge, Textarea } from '../ui';
+import { permsOf, roleOf } from '../permissions';
 
 // ─── KPI Cards ────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ function KpiCard({ icon, value, label, sub, color: _color }: {
 
 function HotLeadsTable({ state, onLeadClick }: { state: AppState; onLeadClick: () => void }) {
   const hot = useMemo(() => getHotLeads(state), [state]);
-  const myHot = state.users.find(u => u.id === state.currentUserId)?.role === 'admin'
+  const myHot = permsOf(state)?.allRecords
     ? hot
     : hot.filter(l => l.assigned_to === state.currentUserId);
 
@@ -327,7 +328,9 @@ export default function HomePage({
   onUpdateNote: (id: string, updates: Partial<PinnedNote>) => void;
 }) {
   const currentUser = state.users.find(u => u.id === state.currentUserId)!;
-  const isAdmin     = currentUser.role === 'admin';
+  // מזכירות, ניהול משרד ומנהל רואים את כל הלידים; נציג — רק את שלו
+  const isAdmin     = !!permsOf(state)?.allRecords;
+  const isSales     = roleOf(state) === 'salesperson';
 
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
   const myLeads    = isAdmin ? state.leads : state.leads.filter(l => l.assigned_to === state.currentUserId);
@@ -345,7 +348,7 @@ export default function HomePage({
     { icon: '🔄', value: active,   label: getL('kpi.active_leads', state.labels),  color: 'bg-blue-50 border-blue-200 text-blue-700' },
     { icon: '✅', value: wonMonth, label: getL('kpi.won_month', state.labels),       color: 'bg-green-50 border-green-200 text-green-700' },
     { icon: '📋', value: todayTasks, label: getL('kpi.today_tasks', state.labels),  color: 'bg-amber-50 border-amber-200 text-amber-700' },
-    ...(!isAdmin ? [{ icon: '💰', value: `₪${commission.toLocaleString('he-IL')}`, label: getL('kpi.commission', state.labels), color: 'bg-purple-50 border-purple-200 text-purple-700', sub: `${currentUser.commissionRate * 100}% עמלה` }] : []),
+    ...(isSales ? [{ icon: '💰', value: `₪${commission.toLocaleString('he-IL')}`, label: getL('kpi.commission', state.labels), color: 'bg-purple-50 border-purple-200 text-purple-700', sub: `${currentUser.commissionRate * 100}% עמלה` }] : []),
   ];
 
   return (

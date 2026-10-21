@@ -46,10 +46,11 @@ function localForgotPasswordApi(): Plugin {
             .ilike('email', email)
             .single();
 
+          // כמו api/auth/forgot-password.ts — לא חושפים אילו מיילים רשומים
           if (approvedError || !approvedUser) {
-            res.statusCode = 404;
+            res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Email is not approved in the CRM' }));
+            res.end(JSON.stringify({ ok: true }));
             return;
           }
 
@@ -87,7 +88,8 @@ export default defineConfig({
   server: {
     // פרוקסי לפיתוח מקומי — מעביר /api/* ל-Vercel dev server
     proxy: {
-      '/api': {
+      // לא api/_lib — שם יושבים קבצי קוד משותפים (כמו permissions.ts) שגם המסך מייבא
+      '^/api/(?!_lib/)': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

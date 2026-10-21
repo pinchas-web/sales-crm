@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { AppState, Task } from '../types';
 import { uid, TODAY, ACTIVITY_ICONS, ACTIVITY_LABELS, formatDate, openGoogleCalendar, openWhatsApp } from '../utils';
 import { Btn, SelectInput } from '../ui';
+import { permsOf } from '../permissions';
 
 // ─── Task Row ─────────────────────────────────────────────────────────────────
 
@@ -111,8 +112,8 @@ function AddTaskForm({ state, onAdd }: {
   const [type, setType]         = useState('note');
   const [show, setShow]         = useState(false);
 
-  const currentUser = state.users.find(u => u.id === state.currentUserId);
-  const isAdmin = currentUser?.role === 'admin';
+  // מזכירות, ניהול משרד ומנהל רואים ומשייכים משימות של כולם
+  const isAdmin = !!permsOf(state)?.allRecords;
 
   function handleAdd() {
     if (!note.trim()) return;
@@ -205,8 +206,8 @@ export default function TasksView({
 }) {
   const [filter, setFilter] = useState<'today' | 'week' | 'all' | 'done'>('today');
   const [assigneeFilter, setAssigneeFilter] = useState('');
-  const currentUser = state.users.find(u => u.id === state.currentUserId);
-  const isAdmin = currentUser?.role === 'admin';
+  // מזכירות, ניהול משרד ומנהל רואים ומשייכים משימות של כולם
+  const isAdmin = !!permsOf(state)?.allRecords;
 
   // Date helpers
   const weekEnd = new Date();

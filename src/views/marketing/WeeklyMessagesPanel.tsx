@@ -223,7 +223,10 @@ export default function WeeklyMessagesPanel({ state, onUpdate }: Props) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ rawContent, ctaType, weekDate: selectedWeek, knowledgeBase: state.marketingKnowledge.filter(k => k.category !== 'plan') }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.message ?? errBody.error ?? `HTTP ${res.status}`);
+      }
       const { messages } = await res.json();
       const now = new Date().toISOString();
       const newMessages: MarketingMessage[] = (messages as { platform: MarketingPlatform; content: string }[])

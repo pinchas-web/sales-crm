@@ -19,8 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     new_password: string;
   };
 
-  if (!crm_user_id || !new_password || new_password.length < 6) {
-    return res.status(400).json({ error: 'נדרש crm_user_id וסיסמא של לפחות 6 תווים' });
+  if (!crm_user_id || !new_password || new_password.length < 8) {
+    return res.status(400).json({ error: 'נדרש crm_user_id וסיסמא של לפחות 8 תווים' });
   }
 
   // מציאת auth_user_id מה-crm_users

@@ -255,15 +255,15 @@ function ProductDetailModal({ product, onClose, onSave, onDelete }: {
 // ─── Products View ────────────────────────────────────────────────────────────
 
 export default function ProductsView({
-  state, onSaveProduct, onDeleteProduct,
+  state, onSaveProduct, onDeleteProduct, canEdit,
 }: {
   state: AppState;
   onSaveProduct: (p: Product) => void;
   onDeleteProduct: (id: string) => void;
+  /** מנהל וניהול משרד עורכים; מזכירות צופה בלבד */
+  canEdit: boolean;
 }) {
   const [selected, setSelected] = useState<Product | 'new' | null>(null);
-  const currentUser = state.users.find(u => u.id === state.currentUserId)!;
-  const canEdit     = currentUser.role === 'admin';
 
   const modalProduct: Product | null = selected === 'new' ? null : selected;
   const showModal = selected !== null;

@@ -15,6 +15,7 @@ import {
   uid, formatDate, formatDateTime, openGoogleCalendar, openWhatsApp, findDuplicates,
 } from '../utils';
 import { Btn, Input, SelectInput, Modal, Badge, ScoreBadge, ConfirmDialog, Textarea, EmptyState } from '../ui';
+import { permsOf } from '../permissions';
 
 // ─── Activity type selector ───────────────────────────────────────────────────
 
@@ -124,7 +125,6 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
   const tasks      = state.tasks.filter(t => t.lead_id === lead.id).sort((a, b) => a.due_date.localeCompare(b.due_date));
   const status     = state.statuses.find(s => s.id === lead.status);
   const assignedU  = state.users.find(u => u.id === lead.assigned_to);
-  const currentU   = state.users.find(u => u.id === state.currentUserId)!;
 
   function handleChange(k: string, v: string | boolean | string[]) {
     if (k.startsWith('cf_')) { const key = k.slice(3); setForm(f => ({ ...f, custom_fields: { ...f.custom_fields, [key]: v as string } })); }
@@ -170,7 +170,7 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
               <button onClick={() => openWhatsApp(lead.phone)} className="text-green-500 hover:text-green-700 text-xl p-1">💬</button>
               <a href={`tel:${lead.phone}`} className="text-blue-500 hover:text-blue-700 text-xl p-1">☎️</a>
               {lead.email && <a href={`mailto:${lead.email}`} className="text-gray-400 hover:text-gray-700 text-xl p-1">📧</a>}
-              {currentU.role === 'admin' && <Btn variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>מחק</Btn>}
+              {permsOf(state)?.deleteLeads && <Btn variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>מחק</Btn>}
               <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100">&times;</button>
             </div>
           </div>
@@ -874,9 +874,8 @@ function KanbanBoard({ state, onLeadClick, onStatusChange, onAddLead }: {
   onStatusChange: (id: string, status: string) => void;
   onAddLead: (statusId: string) => void;
 }) {
-  const currentUser = state.users.find(u => u.id === state.currentUserId)!;
   const sorted  = [...state.statuses].sort((a, b) => a.order - b.order);
-  const visible = currentUser.role === 'admin'
+  const visible = permsOf(state)?.allRecords
     ? state.leads
     : state.leads.filter(l => l.assigned_to === state.currentUserId);
 
@@ -1057,7 +1056,6 @@ function TableViewLeads({ state, onLeadClick, onUpdateLead, onAddLead, onBulkUpd
   onBulkUpdateLeads: (ids: string[], updates: Partial<Lead>) => void;
   onBulkDeleteLeads: (ids: string[]) => void;
 }) {
-  const currentUser = state.users.find(u => u.id === state.currentUserId)!;
   const [filterStatus,   setFilterStatus  ] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterProgram,  setFilterProgram ] = useState('');
@@ -1075,7 +1073,8 @@ function TableViewLeads({ state, onLeadClick, onUpdateLead, onAddLead, onBulkUpd
   const editRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (editCell && editRef.current) editRef.current.focus(); }, [editCell]);
 
-  let leads = currentUser.role === 'admin' ? state.leads : state.leads.filter(l => l.assigned_to === state.currentUserId);
+  const perms = permsOf(state);
+  let leads = perms?.allRecords ? state.leads : state.leads.filter(l => l.assigned_to === state.currentUserId);
   if (filterStatus)   leads = leads.filter(l => l.status === filterStatus);
   if (filterAssignee) leads = leads.filter(l => l.assigned_to === filterAssignee);
   if (filterSearch) {
@@ -1157,7 +1156,7 @@ function TableViewLeads({ state, onLeadClick, onUpdateLead, onAddLead, onBulkUpd
             <label className="field-label">סטטוס</label>
             <SelectInput value={filterStatus} onChange={setFilterStatus} options={stOpts} placeholder="כל הסטטוסים" />
           </div>
-          {currentUser.role === 'admin' && (
+          {perms?.allRecords && (
             <div className="min-w-32">
               <label className="field-label">אחראי</label>
               <SelectInput value={filterAssignee} onChange={setFilterAssignee}
@@ -1195,10 +1194,12 @@ function TableViewLeads({ state, onLeadClick, onUpdateLead, onAddLead, onBulkUpd
               className="bg-white text-blue-700 hover:bg-blue-50 border-0 text-xs px-3 py-1.5">
               ✏️ עריכה מרובה
             </Btn>
-            <Btn onClick={() => setShowDelConfirm(true)}
-              className="bg-red-500 hover:bg-red-600 text-white border-0 text-xs px-3 py-1.5">
-              🗑️ מחיקה ({selected.size})
-            </Btn>
+            {perms?.deleteLeads && (
+              <Btn onClick={() => setShowDelConfirm(true)}
+                className="bg-red-500 hover:bg-red-600 text-white border-0 text-xs px-3 py-1.5">
+                🗑️ מחיקה ({selected.size})
+              </Btn>
+            )}
           </div>
           <button onClick={() => setSelected(new Set())} className="text-white/70 hover:text-white text-xs font-medium">
             ✕ בטל בחירה

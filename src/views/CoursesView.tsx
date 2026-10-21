@@ -18,14 +18,24 @@ interface CoursesViewProps {
   onAddContentItem:    (item: ContentItem) => void;
   onUpdateContentItem: (id: string, updates: Partial<ContentItem>) => void;
   onDeleteContentItem: (id: string) => void;
+  /** ניהול משרד: צפייה בלבד — בלי כפתורי עריכה, ושום שינוי לא נשלח */
+  readOnly?: boolean;
 }
+
+const noop = () => {};
 
 export default function CoursesView({
   state,
   onAddCourse, onUpdateCourse, onDeleteCourse,
   onAddLesson, onUpdateLesson, onDeleteLesson,
   onAddContentItem, onUpdateContentItem, onDeleteContentItem,
+  readOnly = false,
 }: CoursesViewProps) {
+  if (readOnly) {
+    onAddCourse = onUpdateCourse = onDeleteCourse = noop;
+    onAddLesson = onUpdateLesson = onDeleteLesson = noop;
+    onAddContentItem = onUpdateContentItem = onDeleteContentItem = noop;
+  }
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
     state.courses[0]?.id ?? null,
   );
@@ -45,6 +55,12 @@ export default function CoursesView({
     : [];
 
   return (
+    <>
+    {readOnly && (
+      <div className="mb-3 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm" dir="rtl">
+        👁️ צפייה בלבד — אפשר לעיין בתכני הקורסים, בלי עריכה ובלי מחיקה.
+      </div>
+    )}
     <div className="flex h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-gray-200 shadow-sm bg-white" dir="rtl">
       {/* Sidebar */}
       <CoursesSidebar
@@ -60,6 +76,7 @@ export default function CoursesView({
         onAddLesson={onAddLesson}
         onUpdateLesson={onUpdateLesson}
         onDeleteLesson={onDeleteLesson}
+        readOnly={readOnly}
       />
 
       {/* Main content */}
@@ -93,6 +110,7 @@ export default function CoursesView({
                 onUpdateItem={onUpdateContentItem}
                 onDeleteItem={onDeleteContentItem}
                 onUpdateLesson={onUpdateLesson}
+                readOnly={readOnly}
               />
             </div>
           </>
@@ -101,17 +119,18 @@ export default function CoursesView({
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400" dir="rtl">
             <div className="text-5xl mb-4">📖</div>
             <h2 className="text-lg font-semibold text-gray-600 mb-1">{selectedCourse.title}</h2>
-            <p className="text-sm">בחר שיעור מהרשימה בצד, או צור שיעור חדש</p>
+            <p className="text-sm">{readOnly ? 'בחר שיעור מהרשימה בצד' : 'בחר שיעור מהרשימה בצד, או צור שיעור חדש'}</p>
           </div>
         ) : (
           /* אין קורס נבחר */
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400" dir="rtl">
             <div className="text-6xl mb-4">📚</div>
             <h2 className="text-lg font-semibold text-gray-600 mb-1">ניהול קורסים</h2>
-            <p className="text-sm">בחר קורס מהרשימה, או צור קורס חדש</p>
+            <p className="text-sm">{readOnly ? 'בחר קורס מהרשימה' : 'בחר קורס מהרשימה, או צור קורס חדש'}</p>
           </div>
         )}
       </div>
     </div>
+    </>
   );
 }

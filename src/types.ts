@@ -6,7 +6,7 @@
 
 // ─── Core Entities ────────────────────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'salesperson';
+export type UserRole = 'admin' | 'office_manager' | 'salesperson' | 'secretary';
 
 export interface User {
   id: string;
@@ -14,7 +14,6 @@ export interface User {
   role: UserRole;
   commissionRate: number;        // 0.10 = 10%
   email?: string;                // מייל לזיהוי מול Supabase Auth
-  password?: string;             // סיסמה — גלויה למנהל בלבד
   phone?: string;                // טלפון
   allowedTabs?: string[];        // לשוניות מותרות — undefined = ללא הגבלה (מנהל)
 }
@@ -301,6 +300,8 @@ export interface AppState {
   dropdownOptions: DropdownOptions;
   customFields: CustomField[];
   currentUserId: string;
+  /** התפקיד האמיתי, כפי שהשרת קבע (crm_users). ב"צפה כ..." — התפקיד של המשתמש הנצפה. */
+  currentUserRole?: string;
   tableColumnPrefs: Record<string, boolean>;
   salesTargets: Record<string, number>;
   labels: Record<string, string>;

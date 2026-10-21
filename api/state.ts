@@ -2,40 +2,94 @@
  * GET  /api/state — טעינת AppState מסונן לפי תפקיד
  * POST /api/state — שמירת AppState עם ולידציית בעלות
  *
- * שכבת האבטחה המרכזית:
- * - Admin: רואה ושומר הכל
- * - Salesperson: רואה רק הנתונים שלו, לא יכול לשמור נתונים של אחרים
+ * שכבת האבטחה המרכזית — לפי טבלת ההרשאות ב-api/_lib/permissions.ts:
+ * - כל תפקיד מקבל רק את הנתונים של הלשוניות שלו. לשונית לא מותרת — לא נשלחת בכלל.
+ * - כל שמירה נבדקת מול ההרשאות, גם אם המסך לא היה מאפשר אותה.
+ * - תפקיד לא מוכר — 403 על הכל.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateRequest } from './_lib/auth';
 import { supabaseAdmin }   from './_lib/supabaseAdmin';
+import { AI_USAGE_CATEGORY } from './_lib/aiUsage';
+import { permsFor, tabsFor } from './_lib/permissions';
+import type { Permissions } from './_lib/permissions';
 
-console.log('[CRM state.ts] module loaded — handler registered');
+export interface Viewer {
+  uid: string;
+  role: string;
+  perms: Permissions;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('[CRM handler] request received:', req.method, req.url);
   try {
     const crmUser = await validateRequest(req.headers.authorization);
     if (!crmUser) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const isAdmin = crmUser.role === 'admin';
-    const uid     = crmUser.crm_user_id;
+    const perms = permsFor(crmUser.role);
+    if (!perms) {
+      console.warn(`[CRM] uid=${crmUser.crm_user_id} has unknown role "${crmUser.role}" — access denied`);
+      return res.status(403).json({ error: 'no_role', message: 'אין לך הרשאות במערכת. פנה למנהל.' });
+    }
+    const viewer: Viewer = { uid: crmUser.crm_user_id, role: crmUser.role, perms };
 
-    if (req.method === 'GET')  return handleGet(res, uid, isAdmin);
+    if (req.method === 'GET')  return handleGet(res, viewer);
     if (req.method === 'POST') {
       // לקוח ישן ששולח את כל ה-state — עלול למחוק נתונים שנוספו ע"י אחרים. חוסמים.
       if (!req.body?.patch) {
         return res.status(409).json({ error: 'outdated_client', message: 'גרסה חדשה של המערכת זמינה — רעננו את הדף' });
       }
-      return handlePatch(req, res, uid, isAdmin);
+      return handlePatch(req, res, viewer);
     }
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     console.error('[CRM] UNHANDLED EXCEPTION in handler:', err);
-    return res.status(500).json({ error: 'Internal server error', details: String(err) });
+    return res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// מה כל תפקיד רשאי לראות מתוך ההגדרות
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * רשימת המשתמשים כפי שתישלח למשתמש המחובר.
+ * - סיסמה לעולם לא יוצאת מהשרת.
+ * - התפקיד של המשתמש המחובר נלקח מ-crm_users (מקור האמת), לא מה-config.
+ * - מי שלא רואה כסף (נציג, מזכירות) רואה פרטים מלאים רק של עצמו; על אחרים — שם ותפקיד בלבד.
+ */
+export function usersForViewer(users: Row[], v: Viewer): Row[] {
+  return users.map(u => {
+    const { password: _pw, ...rest } = u;
+    void _pw;
+    if (rest.id === v.uid) return { ...rest, role: v.role };
+    if (v.perms.seeAllMoney) return rest;
+    return { id: rest.id, name: rest.name, role: rest.role, commissionRate: 0 };
+  });
+}
+
+/** יעדי מכירה: מי שלא רואה כסף רואה רק את היעד שלו */
+export function salesTargetsForViewer(targets: Record<string, number>, v: Viewer) {
+  if (v.perms.seeAllMoney) return targets;
+  return v.uid in targets ? { [v.uid]: targets[v.uid] } : {};
+}
+
+/** הגדרות הלשוניות: לשונית שלא בתפקיד לא נשלחת — אפילו לא השם שלה */
+export function navConfigForViewer(navConfig: Row[], v: Viewer): Row[] {
+  const tabs = tabsFor(v.role) as string[];
+  return navConfig.filter(t => tabs.includes(t.id as string));
+}
+
+/** לפני שמירה של רשימת המשתמשים — מסירים סיסמאות, אם הגיעו */
+export function stripPasswords(users: unknown): unknown {
+  if (!Array.isArray(users)) return users;
+  return users.map(u => {
+    if (!u || typeof u !== 'object') return u;
+    const { password: _pw, ...rest } = u as Row;
+    void _pw;
+    return rest;
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -319,8 +373,10 @@ function marketingMessageToDb(m: Row): Row {
 // GET handler
 // ════════════════════════════════════════════════════════════════════
 
-async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
-  console.log(`[CRM GET] uid=${uid} isAdmin=${isAdmin}`);
+export async function handleGet(res: VercelResponse, v: Viewer) {
+  const { uid, perms } = v;
+  const all = perms.allRecords;
+  console.log(`[CRM GET] uid=${uid} role=${v.role}`);
   // קונפיגורציה משותפת
   const { data: config, error: cfgErr } = await supabaseAdmin
     .from('crm_config')
@@ -331,9 +387,9 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     return res.status(500).json({ error: 'Failed to load config' });
   }
 
-  // לידים — מסונן לנציג (FIX: capture .eq() return value)
+  // לידים — מי שאין לו allRecords רואה רק את שלו
   const leadsQ = supabaseAdmin.from('leads').select('*');
-  const { data: rawLeads = [] } = await (isAdmin ? leadsQ : leadsQ.eq('assigned_to', uid));
+  const { data: rawLeads = [] } = await (all ? leadsQ : leadsQ.eq('assigned_to', uid));
   const leads = (rawLeads ?? []).map(dbToLead);
 
   // פעילויות — רק ללידים הנראים
@@ -342,13 +398,13 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     ? await supabaseAdmin.from('activities').select('*').in('lead_id', leadIds)
     : { data: [] };
 
-  // משימות — מסונן לנציג (FIX: capture .eq() return value)
+  // משימות
   const tasksQ = supabaseAdmin.from('tasks').select('*');
-  const { data: tasks = [] } = await (isAdmin ? tasksQ : tasksQ.eq('assigned_to', uid));
+  const { data: tasks = [] } = await (all ? tasksQ : tasksQ.eq('assigned_to', uid));
 
-  // לקוחות — מסונן לנציג (FIX: capture .eq() return value)
+  // לקוחות — נציג מקבל רק לקוחות של הלידים שלו (הוא יוצר אותם בסגירה, בלי לשונית קליטה)
   const clientsQ = supabaseAdmin.from('clients').select('*');
-  const { data: rawClients = [] } = await (isAdmin
+  const { data: rawClients = [] } = await (all
     ? clientsQ
     : clientsQ.in('lead_id', leadIds.length > 0 ? leadIds : ['__none__']));
   const clients = (rawClients ?? []).map(dbToClient);
@@ -368,9 +424,10 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     .eq('user_id', uid);
   const pinnedNotes = (rawNotes ?? []).map(dbToNote);
 
-  // קורסים — כולם גלויים לכולם (תוכן הוראה משותף)
-  const { data: rawCourses = [] } = await supabaseAdmin
-    .from('courses').select('*').order('order', { ascending: true });
+  // קורסים ושיווק — רק לתפקידים שיש להם את הלשוניות האלה. לאחרים לא נשלח כלום.
+  const { data: rawCourses = [] } = perms.viewCourses
+    ? await supabaseAdmin.from('courses').select('*').order('order', { ascending: true })
+    : { data: [] };
   const courses = (rawCourses ?? []).map(dbToCourse);
 
   // שיעורים
@@ -388,14 +445,16 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
   const contentItems = (rawContentItems ?? []).map(dbToContentItem);
 
   // מאגר ידע שיווקי
-  const { data: rawMktKnowledge = [] } = await supabaseAdmin
-    .from('marketing_knowledge').select('*').order('category', { ascending: true });
+  const { data: rawMktKnowledge = [] } = perms.marketing
+    ? await supabaseAdmin.from('marketing_knowledge').select('*')
+        .neq('category', AI_USAGE_CATEGORY).order('category', { ascending: true })
+    : { data: [] };
   const marketingKnowledge = (rawMktKnowledge ?? []).map(dbToMarketingKnowledge);
 
   // מסרים שיווקיים
-  const { data: rawMktMessages = [] } = await supabaseAdmin
-    .from('marketing_messages').select('*')
-    .order('week_date', { ascending: false });
+  const { data: rawMktMessages = [] } = perms.marketing
+    ? await supabaseAdmin.from('marketing_messages').select('*').order('week_date', { ascending: false })
+    : { data: [] };
   const marketingMessages = (rawMktMessages ?? []).map(dbToMarketingMessage);
 
   if (!config) {
@@ -406,17 +465,17 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
   console.log(`[CRM GET] ✓ returning: leads=${leads.length} tasks=${(tasks??[]).length} activities=${(activities??[]).length} clients=${clients.length} chat=${chatMessages.length} notes=${pinnedNotes.length}`);
   return res.status(200).json({
     // קונפיגורציה
-    users:             config.users              ?? [],
+    users:             usersForViewer(config.users ?? [], v),
     statuses:          config.statuses           ?? [],
     products:          config.products           ?? [],
     dropdownOptions:   config.dropdown_options   ?? {},
     customFields:      config.custom_fields      ?? [],
     labels:            config.labels             ?? {},
-    navConfig:         config.nav_config         ?? [],
-    salesTargets:      config.sales_targets      ?? {},
+    navConfig:         navConfigForViewer(config.nav_config ?? [], v),
+    salesTargets:      salesTargetsForViewer(config.sales_targets ?? {}, v),
     automationRules:   config.automation_rules   ?? [],
     tableColumnPrefs:  config.table_column_prefs ?? {},
-    dailySummaryEmail: config.daily_summary_email ?? '',
+    dailySummaryEmail: perms.seeAllMoney ? (config.daily_summary_email ?? '') : '',
     // נתונים
     leads,
     activities:   activities   ?? [],
@@ -433,6 +492,7 @@ async function handleGet(res: VercelResponse, uid: string, isAdmin: boolean) {
     marketingMessages,
     marketingDeletedWeeks: [],
     currentUserId: uid,
+    currentUserRole: v.role,
   });
 }
 
@@ -519,19 +579,28 @@ async function applyCollection(spec: CollectionSpec, change: Change | undefined)
   return refused;
 }
 
-async function handlePatch(req: VercelRequest, res: VercelResponse, uid: string, isAdmin: boolean) {
+export async function handlePatch(req: VercelRequest, res: VercelResponse, v: Viewer) {
+  const { uid, perms } = v;
+  const all     = perms.allRecords;
+  const isAdmin = v.role === 'admin';
   const body = req.body as { changes?: Record<string, Change>; config?: Record<string, unknown>; marketingDeletedWeeks?: string[] };
   const changes = body.changes ?? {};
   const summary = Object.entries(changes)
     .map(([k, c]) => `${k}+${c.upsert?.length ?? 0}~${c.update?.length ?? 0}-${c.delete?.length ?? 0}`).join(' ');
-  console.log(`[CRM PATCH] uid=${uid} isAdmin=${isAdmin} ${summary} config=${Object.keys(body.config ?? {}).join(',')}`);
+  console.log(`[CRM PATCH] uid=${uid} role=${v.role} ${summary} config=${Object.keys(body.config ?? {}).join(',')}`);
 
   try {
-    // ── קונפיגורציה (admin בלבד) — רק המפתחות שהשתנו ──────────────────────
-    const cfgKeys = Object.keys(body.config ?? {}).filter(k => k in CONFIG_COLUMNS);
-    if (isAdmin && cfgKeys.length) {
+    // ── קונפיגורציה — רק המפתחות שהשתנו, ורק אלה שהתפקיד רשאי לשמור ──────────
+    const allowedCfg = perms.configKeys as string[];
+    const sentCfg = Object.keys(body.config ?? {}).filter(k => k in CONFIG_COLUMNS);
+    const cfgKeys = sentCfg.filter(k => allowedCfg.includes(k));
+    if (sentCfg.length > cfgKeys.length) {
+      console.warn(`[CRM PATCH] ignored config keys for role=${v.role}: ${sentCfg.filter(k => !cfgKeys.includes(k)).join(',')}`);
+    }
+    if (cfgKeys.length) {
       const update: Row = { id: CONFIG_ID, updated_at: new Date().toISOString() };
       for (const k of cfgKeys) update[CONFIG_COLUMNS[k]] = body.config![k] ?? (k === 'dailySummaryEmail' ? '' : null);
+      if ('users' in update) update.users = stripPasswords(update.users);
       const { data: existing } = await supabaseAdmin.from('crm_config').select('id').eq('id', CONFIG_ID).maybeSingle();
       const { error } = existing
         ? await supabaseAdmin.from('crm_config').update(update).eq('id', CONFIG_ID)
@@ -540,24 +609,32 @@ async function handlePatch(req: VercelRequest, res: VercelResponse, uid: string,
       console.log(`[CRM] crm_config ✓ ${cfgKeys.join(',')}`);
     }
 
-    // נציג: רק לידים שמשויכים אליו (גם לפני וגם אחרי השינוי)
+    // ── לידים ──────────────────────────────────────────────────────────────
+    // בלי allRecords: רק לידים שמשויכים אליו (גם לפני וגם אחרי השינוי).
+    // עם allRecords (מזכירות, ניהול משרד, מנהל): כל ליד, כולל העברה בין נציגים.
     const ownRow = (field: string) => (row: Row, ex?: Row) =>
-      isAdmin || (row[field] === uid && (!ex || ex[field] === uid));
+      all || (row[field] === uid && (!ex || ex[field] === uid));
+
+    const leadsChange = changes.leads;
+    const moved = (leadsChange?.update ?? []).filter(p => 'assigned_to' in p);
+    const before = await fetchExisting('leads', moved.map(p => p.id as string));
+
     let refused = await applyCollection({
       table: 'leads', fromDb: dbToLead, toDb: leadToDb,
-      canWrite: ownRow('assigned_to'), canDelete: ex => isAdmin || ex.assigned_to === uid,
-    }, changes.leads);
-    if (refused && !isAdmin) {
-      return res.status(403).json({ error: 'Cannot modify leads assigned to others' });
+      canWrite: ownRow('assigned_to'), canDelete: () => perms.deleteLeads,
+    }, leadsChange);
+    if (refused) {
+      return res.status(403).json({ error: 'Cannot modify these leads' });
     }
+    await logReassignments(moved, before, uid);
 
     let mine: Set<string> | null = null;
-    if (!isAdmin) {
+    if (!all) {
       const { data, error } = await supabaseAdmin.from('leads').select('id').eq('assigned_to', uid);
       if (error) throw new Error(`leads select: ${error.message}`);
       mine = new Set((data ?? []).map((l: Row) => l.id as string));
     }
-    const ownsLead = (leadId: unknown) => isAdmin || (typeof leadId === 'string' && mine!.has(leadId));
+    const ownsLead = (leadId: unknown) => all || (typeof leadId === 'string' && mine!.has(leadId));
 
     refused += await applyCollection({
       table: 'activities', fromDb: same, toDb: same,
@@ -567,13 +644,13 @@ async function handlePatch(req: VercelRequest, res: VercelResponse, uid: string,
 
     refused += await applyCollection({
       table: 'tasks', fromDb: same, toDb: same,
-      canWrite: ownRow('assigned_to'), canDelete: ex => isAdmin || ex.assigned_to === uid,
+      canWrite: ownRow('assigned_to'), canDelete: ex => all || ex.assigned_to === uid,
     }, changes.tasks);
 
     refused += await applyCollection({
       table: 'clients', fromDb: dbToClient, toDb: clientToDb,
       canWrite: (r, ex) => ownsLead(r.leadId) && (!ex || ownsLead(ex.leadId)),
-      canDelete: () => isAdmin,
+      canDelete: () => perms.deleteLeads,
     }, changes.clients);
 
     // צ'אט: הכותב (או מנהל) עורך הודעה; כל מי שרואה הודעה רק מסמן אותה כנקראה.
@@ -609,25 +686,53 @@ async function handlePatch(req: VercelRequest, res: VercelResponse, uid: string,
       canDelete: ex => ex.userId === uid,
     }, changes.pinnedNotes);
 
-    // קורסים, שיווק — משותפים לכל המשתמשים (כמו קודם)
-    const open = { canWrite: () => true, canDelete: () => true };
-    await applyCollection({ table: 'courses', fromDb: dbToCourse, toDb: courseToDb, ...open }, changes.courses);
-    await applyCollection({ table: 'lessons', fromDb: dbToLesson, toDb: lessonToDb, ...open }, changes.lessons);
-    await applyCollection({ table: 'content_items', fromDb: dbToContentItem, toDb: contentItemToDb, ...open }, changes.contentItems);
-    await applyCollection({ table: 'marketing_knowledge', fromDb: dbToMarketingKnowledge, toDb: marketingKnowledgeToDb, ...open }, changes.marketingKnowledge);
+    // ── קורסים — רק מי שרשאי לערוך (מנהל). ניהול משרד צופה בלבד. ─────────────
+    const courseEdit = { canWrite: () => perms.editCourses, canDelete: () => perms.editCourses };
+    refused += await applyCollection({ table: 'courses', fromDb: dbToCourse, toDb: courseToDb, ...courseEdit }, changes.courses);
+    refused += await applyCollection({ table: 'lessons', fromDb: dbToLesson, toDb: lessonToDb, ...courseEdit }, changes.lessons);
+    refused += await applyCollection({ table: 'content_items', fromDb: dbToContentItem, toDb: contentItemToDb, ...courseEdit }, changes.contentItems);
 
-    const deletedWeeks = body.marketingDeletedWeeks ?? [];
+    // ── שיווק — מנהל וניהול משרד ─────────────────────────────────────────────
+    refused += await applyCollection({
+      table: 'marketing_knowledge', fromDb: dbToMarketingKnowledge, toDb: marketingKnowledgeToDb,
+      // מונה ה-AI מנוהל רק ע"י השרת
+      canWrite: (r, ex) => perms.marketing && r.category !== AI_USAGE_CATEGORY && ex?.category !== AI_USAGE_CATEGORY,
+      canDelete: ex => perms.marketing && ex.category !== AI_USAGE_CATEGORY,
+    }, changes.marketingKnowledge);
+
+    const deletedWeeks = perms.marketing ? (body.marketingDeletedWeeks ?? []) : [];
     if (deletedWeeks.length) {
       const { error } = await supabaseAdmin.from('marketing_messages').delete().in('week_date', deletedWeeks);
       if (error) throw new Error(`marketing_messages weeks: ${error.message}`);
       console.log(`[CRM] marketing_messages ✓ deleted weeks: ${deletedWeeks.join(', ')}`);
     }
-    await applyCollection({ table: 'marketing_messages', fromDb: dbToMarketingMessage, toDb: marketingMessageToDb, ...open }, changes.marketingMessages);
+    const mkt = { canWrite: () => perms.marketing, canDelete: () => perms.marketing };
+    refused += await applyCollection({ table: 'marketing_messages', fromDb: dbToMarketingMessage, toDb: marketingMessageToDb, ...mkt }, changes.marketingMessages);
 
     console.log(`[CRM PATCH] ✓ done${refused ? ` (refused ${refused})` : ''}`);
     return res.status(200).json({ saved: true, refused });
   } catch (err) {
     console.error('[CRM PATCH] ERROR:', err);
-    return res.status(500).json({ error: 'Save failed', details: String(err) });
+    return res.status(500).json({ error: 'Save failed' });
   }
+}
+
+/** העברת ליד בין נציגים נרשמת ביומן הליד — כדי שיהיה ברור מי העביר, ממי ולמי */
+async function logReassignments(moved: Row[], before: Map<string, Row>, uid: string) {
+  const changed = moved.filter(p => before.has(p.id as string) && before.get(p.id as string)!.assigned_to !== p.assigned_to);
+  if (!changed.length) return;
+  const { data: cfg } = await supabaseAdmin.from('crm_config').select('users').eq('id', CONFIG_ID).maybeSingle();
+  const names = new Map<string, string>(((cfg?.users ?? []) as Row[]).map(u => [u.id as string, u.name as string]));
+  const name = (id: unknown) => (typeof id === 'string' && names.get(id)) || 'לא משויך';
+  const now = new Date().toISOString();
+  const rows = changed.map(p => ({
+    id: `reassign-${p.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    lead_id: p.id,
+    date: now,
+    type: 'note',
+    created_by: uid,
+    note: `🔀 הליד הועבר מ${name(before.get(p.id as string)!.assigned_to)} ל${name(p.assigned_to)} (ע"י ${name(uid)})`,
+  }));
+  const { error } = await supabaseAdmin.from('activities').insert(rows);
+  if (error) console.error('[CRM] reassignment log failed:', error.message);
 }

@@ -10,6 +10,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import type { StatePatch } from './sync';
+import type { UserRole } from './types';
 
 // ── Supabase client ──────────────────────────────────────────────────────────
 // VITE_* משתנים נחשפים לדפדפן — anon key בלבד (לא service role!)
@@ -83,25 +84,6 @@ export async function apiForgotPassword(email: string): Promise<{ ok: true } | {
   }
 }
 
-export async function apiRegister(params: {
-  name: string;
-  email: string;
-  password: string;
-}): Promise<{ ok: true } | { error: string }> {
-  const { error } = await supabase.auth.signUp({
-    email: params.email,
-    password: params.password,
-    options: {
-      data: { name: params.name },
-      emailRedirectTo: window.location.origin,
-    },
-  });
-
-  if (error) return { error: error.message };
-  await supabase.auth.signOut();
-  return { ok: true };
-}
-
 /**
  * שומר לשרת רק את מה שהשתנה (ראו src/sync.ts).
  * הServerless function מאמת בעלות — נציג לא יכול לשמור נתונים של אחרים.
@@ -171,7 +153,7 @@ export async function apiGetCurrentUser(): Promise<{ crm_user_id: string; name: 
 export async function apiCreateUser(params: {
   email: string;
   crm_user_id: string;
-  role: 'admin' | 'salesperson';
+  role: UserRole;
   password: string;
 }): Promise<{ auth_user_id: string } | { error: string }> {
   const res = await fetch('/api/users/create', {
@@ -200,7 +182,7 @@ export async function apiChangeUserPassword(
 export async function apiUpdateUser(params: {
   crm_user_id: string;
   email?: string;
-  role?: 'admin' | 'salesperson';
+  role?: UserRole;
 }): Promise<{ ok: true } | { error: string }> {
   const res = await fetch('/api/users/update', {
     method: 'POST',
@@ -228,26 +210,30 @@ const COURSE_FILES_BUCKET   = 'course-files';
 
 /**
  * מעלה קובץ ל-Supabase Storage (bucket: course-files).
+ * השרת נותן כתובת העלאה חתומה (רק למי שרשאי לערוך קורסים), והקובץ עולה ישר ל-Supabase.
  * מחזיר { fileKey, fileUrl } — או זורק שגיאה.
  */
 export async function apiUploadCourseFile(
   file: File,
   folder = 'uploads',
 ): Promise<{ fileKey: string; fileUrl: string }> {
-  const ext     = file.name.split('.').pop() ?? 'bin';
-  const fileKey = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
+
+  const res = await fetch('/api/storage/upload-url', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ folder, ext }),
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status === 403 ? 'אין הרשאה להעלות קבצים' : res.status}`);
+  const { path, token, publicUrl } = await res.json() as { path: string; token: string; publicUrl: string };
 
   const { error } = await supabase.storage
     .from(COURSE_FILES_BUCKET)
-    .upload(fileKey, file, { upsert: false });
+    .uploadToSignedUrl(path, token, file);
 
   if (error) throw new Error(`Upload failed: ${error.message}`);
 
-  const { data } = supabase.storage
-    .from(COURSE_FILES_BUCKET)
-    .getPublicUrl(fileKey);
-
-  return { fileKey, fileUrl: data.publicUrl };
+  return { fileKey: path, fileUrl: publicUrl };
 }
 
 /**
@@ -281,14 +267,4 @@ export async function apiDownloadCourseFile(fileKey: string): Promise<Blob> {
   }
 
   return data;
-}
-
-/**
- * מוחק קובץ מ-Supabase Storage.
- */
-export async function apiDeleteCourseFile(fileKey: string): Promise<void> {
-  const { error } = await supabase.storage
-    .from(COURSE_FILES_BUCKET)
-    .remove([fileKey]);
-  if (error) console.error('Delete file error:', error);
 }
