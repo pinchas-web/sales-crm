@@ -23,9 +23,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .ilike('email', email)
     .single();
 
+  // תמיד אותה תשובה — כדי שאי אפשר יהיה לבדוק דרך המסך הזה אילו מיילים רשומים במערכת
   if (approvedError || !approvedUser) {
-    console.warn(`[CRM forgot-password] ignored reset for unapproved email=${email}`);
-    return res.status(404).json({ error: 'Email is not approved in the CRM' });
+    console.warn('[CRM forgot-password] ignored reset for an unapproved email');
+    return res.status(200).json({ ok: true });
   }
 
   const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
@@ -33,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
 
   if (error) {
-    console.error(`[CRM forgot-password] reset email failed for ${email}:`, error.message);
+    console.error('[CRM forgot-password] reset email failed:', error.message);
     return res.status(500).json({ error: 'Could not send reset email' });
   }
 

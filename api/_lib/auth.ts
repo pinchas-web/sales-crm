@@ -2,7 +2,8 @@ import { supabaseAdmin } from './supabaseAdmin';
 
 export interface CrmUser {
   crm_user_id: string;
-  role: 'admin' | 'salesperson';
+  /** אחד מ-ROLES ב-./permissions — או ערך לא מוכר, שמקבל אפס הרשאות */
+  role: string;
   email: string;
 }
 
@@ -26,7 +27,6 @@ export async function validateRequest(authHeader: string | undefined): Promise<C
     .single();
 
   if (!dbError && crmUser) {
-    console.log(`[CRM auth] ok uid=${crmUser.crm_user_id} role=${crmUser.role}`);
     return crmUser as CrmUser;
   }
 
@@ -36,8 +36,15 @@ export async function validateRequest(authHeader: string | undefined): Promise<C
     return null;
   }
 
+  // קישור לפי מייל רק אם בעל החשבון הוכיח שהמייל שלו (אימות מייל / Google).
+  // בלי זה, מי שנרשם עם מייל של נציג מאושר היה מקבל את החשבון שלו.
+  if (!user.email_confirmed_at) {
+    console.error(`[CRM auth] FAILED: auth_user_id=${user.id} email not confirmed — not linking`);
+    return null;
+  }
+
   // Approved access is based on crm_users. This lets admins approve an email,
-  // while users can later sign in through Google or a pending signup identity.
+  // while users can later sign in through Google.
   const { data: approvedUser, error: emailError } = await supabaseAdmin
     .from('crm_users')
     .select('crm_user_id, role, email')
@@ -45,7 +52,7 @@ export async function validateRequest(authHeader: string | undefined): Promise<C
     .single();
 
   if (emailError || !approvedUser) {
-    console.error(`[CRM auth] FAILED: auth_user_id=${user.id} email=${email} not approved in crm_users -`, emailError?.message);
+    console.error(`[CRM auth] FAILED: auth_user_id=${user.id} not approved in crm_users -`, emailError?.message);
     return null;
   }
 
@@ -55,10 +62,10 @@ export async function validateRequest(authHeader: string | undefined): Promise<C
     .eq('crm_user_id', approvedUser.crm_user_id);
 
   if (linkError) {
-    console.error(`[CRM auth] FAILED: could not link email=${email} to auth_user_id=${user.id} -`, linkError.message);
+    console.error(`[CRM auth] FAILED: could not link auth_user_id=${user.id} -`, linkError.message);
     return null;
   }
 
-  console.log(`[CRM auth] linked email=${email} uid=${approvedUser.crm_user_id} role=${approvedUser.role}`);
+  console.log(`[CRM auth] linked auth_user_id=${user.id} uid=${approvedUser.crm_user_id} role=${approvedUser.role}`);
   return { ...approvedUser, email } as CrmUser;
 }

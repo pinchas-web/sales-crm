@@ -32,10 +32,12 @@ interface LessonBoardProps {
   onUpdateItem:   (id: string, updates: Partial<ContentItem>) => void;
   onDeleteItem:   (id: string) => void;
   onUpdateLesson: (id: string, updates: Partial<Lesson>) => void;
+  readOnly?:      boolean;
 }
 
 export default function LessonBoard({
   lesson, items, onAddItem, onUpdateItem, onDeleteItem, onUpdateLesson,
+  readOnly = false,
 }: LessonBoardProps) {
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState('');
@@ -184,11 +186,13 @@ export default function LessonBoard({
   return (
     <div className="space-y-4" dir="rtl">
       {/* Upload zone */}
-      <FileUploadZone
-        onFilesAccepted={handleFilesAccepted}
-        onVideoUrl={handleVideoUrl}
-        processing={processing}
-      />
+      {!readOnly && (
+        <FileUploadZone
+          onFilesAccepted={handleFilesAccepted}
+          onVideoUrl={handleVideoUrl}
+          processing={processing}
+        />
+      )}
       {processing && processingMsg && (
         <div className="flex items-center gap-2 text-sm text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2">
           <span className="animate-spin">⏳</span>
@@ -201,7 +205,7 @@ export default function LessonBoard({
         <div className="text-center py-12 text-gray-400">
           <div className="text-4xl mb-3">📂</div>
           <p className="text-sm">עדיין אין תוכן לשיעור זה</p>
-          <p className="text-xs mt-1">גרור קבצים למעלה כדי להתחיל</p>
+          {!readOnly && <p className="text-xs mt-1">גרור קבצים למעלה כדי להתחיל</p>}
         </div>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -289,6 +293,7 @@ export default function LessonBoard({
                                           onDelete={() => onDeleteItem(item.id)}
                                           onRename={title => onUpdateItem(item.id, { title })}
                                           onUpdateItem={updates => onUpdateItem(item.id, updates)}
+                                          readOnly={readOnly}
                                         />
                                       </div>
                                     )}

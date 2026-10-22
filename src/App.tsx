@@ -5,10 +5,12 @@
  */
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, apiLoadState, apiSaveState } from './api';
+import { supabase, apiLoadState, apiSavePatch, apiGetCurrentUser, SaveError } from './api';
+import { diffState, emptyBase, isEmptyPatch, rebase, snapshot } from './sync';
 import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, PinnedNote, CustomField, Course, Lesson, ContentItem } from './types';
 import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
+import { permsFor, tabsFor, ROLE_LABELS, isRole } from './permissions';
 
 import LoginScreen, { ResetPasswordScreen } from './views/LoginScreen';
 import HomePage      from './views/HomePage';
@@ -144,7 +146,8 @@ function UserBadge({ state }: { state: AppState }) {
         <div className="hidden sm:block text-right">
           <p className="text-xs font-bold leading-none text-amber-100">{current?.name}</p>
           <p className="text-[10px] text-amber-200/60 leading-none mt-1">
-            {current?.role === 'admin' ? '👑 מנהל' : '💼 נציג'}
+            {state.currentUserRole === 'admin' ? '👑 ' : '💼 '}
+            {isRole(state.currentUserRole) ? ROLE_LABELS[state.currentUserRole] : 'ללא תפקיד'}
           </p>
         </div>
       </div>
@@ -202,6 +205,16 @@ export default function App() {
   const [pendingOnboarding, setPendingOnboarding] = useState<Lead | null>(null);
   const [loading, setLoading]                 = useState(true);
   const [viewAsId, setViewAsId]               = useState<string | null>(null);
+  const [toast, setToast]                     = useState('');
+  const [saveStatus, setSaveStatus]           = useState<'saved' | 'saving' | 'error'>('saved');
+
+  // סנכרון — ראו flushSave / refreshFromServer
+  const syncedRef            = useRef<AppState | null>(null);
+  const latestRef            = useRef<AppState>(SEED_STATE);
+  const savingRef            = useRef(false);
+  const saveEpochRef         = useRef(0);
+  const saveTimerRef         = useRef<number | undefined>(undefined);
+  const needsHardRefreshRef  = useRef(false);
 
   // טעינה ראשונית מ-API (רק כשיש session)
   const didLoad = useRef(false);
@@ -211,17 +224,33 @@ export default function App() {
     apiLoadState()
       .then(data => {
         setAuthNotice('');
-        if (data) setState(mergeState(data as Partial<AppState>));
+        if (data) {
+          const loaded = mergeState(data as Partial<AppState>);
+          syncedRef.current = snapshot(loaded);
+          latestRef.current = loaded;
+          setState(loaded);
+        } else {
+          // הפעלה ראשונה — אין כלום בשרת, אז כל ה-seed ייחשב כשינוי וישמר
+          syncedRef.current = emptyBase(SEED_STATE);
+          // התפקיד לא מגיע עם state ריק — שואלים את השרת בנפרד
+          void apiGetCurrentUser().then(me => {
+            if (me) setState(s => ({ ...s, currentUserId: me.crm_user_id, currentUserRole: me.role }));
+          });
+        }
       })
       .catch(async err => {
         console.error('CRM: failed to load state', err);
-        if ((err as Error & { status?: number }).status === 401) {
+        const status = (err as Error & { status?: number }).status;
+        if (status === 401) {
           setAuthNotice('המשתמש הזה עדיין לא אושר על ידי מנהל. אחרי שהמנהל יוסיף את המייל שלך במסך המשתמשים, תוכל להיכנס.');
+          await supabase.auth.signOut();
+        } else if (status === 403) {
+          setAuthNotice('אין לך הרשאות במערכת. פנה למנהל.');
           await supabase.auth.signOut();
         }
       })
       .finally(() => setLoading(false));
-  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session]);
 
   // איפוס כשמשתמש מתנתק
   useEffect(() => {
@@ -229,15 +258,93 @@ export default function App() {
       setState(SEED_STATE);
       setLoading(true);
       didLoad.current = false;
+      syncedRef.current = null;
     }
   }, [session]);
 
-  // שמירה אוטומטית בכל שינוי state (או כשהטעינה מסתיימת)
+  // ── סנכרון: שמירת שינויים בלבד + רענון תקופתי (ראו src/sync.ts) ──────────
+  // syncedRef = מה שהשרת יודע. שומרים רק את ההפרש בינו לבין ה-state,
+  // ומושכים שינויים של משתמשים אחרים כל 10 שניות ובחזרה ללשונית.
+  latestRef.current = state;
+
+  const flushSave = useCallback(async () => {
+    if (savingRef.current || !syncedRef.current) return;
+    const cur = latestRef.current;
+    const patch = diffState(syncedRef.current, cur);
+    if (isEmptyPatch(patch)) { setSaveStatus('saved'); return; }
+    savingRef.current = true;
+    setSaveStatus('saving');
+    try {
+      await apiSavePatch(patch);
+      syncedRef.current = snapshot(cur);
+      saveEpochRef.current++;
+      setSaveStatus('saved');
+      if (patch.marketingDeletedWeeks?.length) setState(s => ({ ...s, marketingDeletedWeeks: [] }));
+    } catch (err) {
+      console.error('[CRM] save FAILED:', err);
+      setSaveStatus('error');
+      const status = err instanceof SaveError ? err.status : 0;
+      if (status >= 400 && status < 500 && status !== 401 && status !== 429) {
+        // השרת דחה את השינוי (למשל הרשאות) — לא מנסים שוב; טוענים מחדש את מצב השרת
+        syncedRef.current = snapshot(cur);
+        needsHardRefreshRef.current = true;
+      }
+    } finally {
+      savingRef.current = false;
+    }
+    if (needsHardRefreshRef.current) { void refreshFromServer(); return; }
+    // שינויים שנוספו בזמן השמירה, או ניסיון חוזר אחרי שגיאת רשת
+    if (syncedRef.current && !isEmptyPatch(diffState(syncedRef.current, latestRef.current))) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => { void flushSave(); }, 3000);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshFromServer = useCallback(async () => {
+    if (savingRef.current || !syncedRef.current) return;
+    const epoch = saveEpochRef.current;
+    let data: unknown;
+    try { data = await apiLoadState(); } catch (err) { console.error('[CRM] refresh FAILED:', err); return; }
+    // שמירה שהתחילה בזמן הטעינה — התשובה עלולה להיות ישנה, נחכה לרענון הבא
+    if (!data || savingRef.current || epoch !== saveEpochRef.current || !syncedRef.current) return;
+    const server = mergeState(data as Partial<AppState>);
+    const hard = needsHardRefreshRef.current;
+    needsHardRefreshRef.current = false;
+    const next = hard ? server : rebase(server, syncedRef.current, latestRef.current);
+    syncedRef.current = snapshot(server);
+    latestRef.current = next;
+    setState(next);
+  }, []);
+
+  // שמירה (debounce קצר) בכל שינוי state
   useEffect(() => {
     if (loading || !session) return;
-    console.log('[CRM] state changed — triggering save. leads:', state.leads.length, 'tasks:', state.tasks.length, 'activities:', state.activities.length);
-    apiSaveState(state).catch(err => console.error('[CRM] save FAILED:', err));
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => { void flushSave(); }, 400);
   }, [state, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // רענון תקופתי + בחזרה ללשונית
+  useEffect(() => {
+    if (loading || !session) return;
+    const tick = () => { if (!document.hidden) void refreshFromServer(); };
+    const id = window.setInterval(tick, 10000);
+    window.addEventListener('focus', tick);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('focus', tick);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [loading, session, refreshFromServer]);
+
+  // אזהרה לפני סגירה כשיש שינויים שעוד לא נשמרו
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (syncedRef.current && !isEmptyPatch(diffState(syncedRef.current, latestRef.current))) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Run no_activity automations on mount
   useEffect(() => {
@@ -435,7 +542,13 @@ export default function App() {
       leads: s.leads.map(l => l.id === lead.id ? { ...l, dealValue } : l),
     }));
     setPendingOnboarding(null);
-    setActiveTab('clients');
+    // מי שיש לו לשונית קליטה עובר אליה; נציג נשאר בלידים — המזכירות קולטת
+    if (tabsFor(latestRef.current.currentUserRole).includes('clients')) {
+      setActiveTab('clients');
+    } else {
+      setToast('הלקוח הועבר לקליטה ✓');
+      window.setTimeout(() => setToast(''), 4000);
+    }
   }, [pendingOnboarding]);
 
   // ── Pinned notes handlers ──────────────────────────────────────────────────
@@ -515,23 +628,26 @@ export default function App() {
     { id: 'settings',  icon: '⚙️', defaultLabel: 'הגדרות'  },
   ];
 
-  // המשתמש הנוכחי (או המשתמש הנצפה במצב view-as)
+  // המשתמש הנוכחי (או המשתמש הנצפה במצב view-as).
+  // התפקיד של המשתמש המחובר מגיע מהשרת; ב"צפה כ..." — התפקיד של המשתמש הנצפה.
   const navUserId = viewAsId ?? state.currentUserId;
   const navUser   = state.users.find(u => u.id === navUserId);
+  const navRole   = viewAsId ? navUser?.role : state.currentUserRole;
+  const navPerms  = permsFor(navRole);
+  const allowedTabIds: string[] = tabsFor(navRole, navUser?.allowedTabs);
 
   const visibleTabs = [...state.navConfig]
     .filter(t => t.visible)
     .sort((a, b) => a.order - b.order)
     .map(t => NAV_TABS.find(n => n.id === t.id))
     .filter((t): t is typeof NAV_TABS[0] => !!t)
-    // TEMP BYPASS — כל הלשוניות פתוחות לכולם עד שנתקן את התפקיד
-    .filter(() => {
-      void navUser;
-      return true;
-      // if (!navUser || navUser.role === 'admin') return true;
-      // if (!navUser.allowedTabs) return true;
-      // return navUser.allowedTabs.includes(t.id);
-    });
+    .filter(t => allowedTabIds.includes(t.id));
+
+  // לשונית שלא מותרת לא מוצגת בכלל — גם אם הגיעו אליה מקישור פנימי
+  const shownTab = visibleTabs.some(t => t.id === activeTab) ? activeTab : (visibleTabs[0]?.id ?? '');
+
+  // לקוחות חדשים שעוד לא התחילו קליטה — מונה על לשונית הקליטה
+  const newClients = state.clients.filter(c => !Object.values(c.onboardingProgress ?? {}).some(Boolean)).length;
 
   const unreadChat = state.chatMessages.filter(m =>
     m.fromUserId !== state.currentUserId && !m.readBy.includes(state.currentUserId)
@@ -579,8 +695,22 @@ export default function App() {
     );
   }
 
+  // תפקיד לא מוכר — לא רואה כלום (גם אם השרת היה מחזיר משהו)
+  if (!permsFor(state.currentUserRole)) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-700 to-indigo-700 flex items-center justify-center p-4" dir="rtl">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center space-y-4 max-w-sm">
+          <div className="text-5xl">🔒</div>
+          <p className="text-gray-800 font-semibold">אין לך הרשאות במערכת</p>
+          <p className="text-gray-500 text-sm">פנה למנהל כדי שיגדיר לך תפקיד.</p>
+          <button onClick={() => supabase.auth.signOut()} className="text-blue-600 text-sm font-medium hover:underline">יציאה</button>
+        </div>
+      </div>
+    );
+  }
+
   // כשהמנהל צופה כמשתמש אחר — state מסונן לפי המשתמש הנצפה (לא לשמירה)
-  const effectiveState = viewAsId ? { ...state, currentUserId: viewAsId } : state;
+  const effectiveState = viewAsId ? { ...state, currentUserId: viewAsId, currentUserRole: navRole } : state;
 
   return (
     <div className="min-h-screen bg-gray-100 text-right" dir="rtl">
@@ -613,11 +743,13 @@ export default function App() {
           </div>
           <nav className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide py-0.5">
             {visibleTabs.map(tab => {
-              const isActive = activeTab === tab.id;
-              const label = getLabel(`tab.${tab.id}`) || tab.defaultLabel;
+              const isActive = shownTab === tab.id;
+              const custom = getLabel(`tab.${tab.id}`);
+              const label = custom === `tab.${tab.id}` ? tab.defaultLabel : custom;
               const badge =
                 tab.id === 'chat'  ? unreadChat   :
-                tab.id === 'tasks' ? overdueTasks : 0;
+                tab.id === 'tasks' ? overdueTasks :
+                tab.id === 'clients' ? newClients : 0;
               return (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                   className={`relative brand-nav-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer select-none ${isActive ? 'brand-nav-active text-amber-100' : 'text-white/75 hover:text-white hover:bg-white/10'}`}>
@@ -633,6 +765,9 @@ export default function App() {
             })}
           </nav>
           {/* UserBadge */}
+          <span className="text-[11px] text-white/70 whitespace-nowrap" title={saveStatus === 'error' ? 'השמירה נכשלה — ננסה שוב אוטומטית' : undefined}>
+            {saveStatus === 'saving' ? 'שומר…' : saveStatus === 'error' ? '⚠️ לא נשמר' : '✓ נשמר'}
+          </span>
           <UserBadge state={state} />
         </div>
       </header>
@@ -640,7 +775,7 @@ export default function App() {
 
       {/* Main */}
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
-        {activeTab === 'home' && (
+        {shownTab === 'home' && (
           <HomePage
             state={effectiveState}
             onNavigate={setActiveTab}
@@ -651,7 +786,7 @@ export default function App() {
             onUpdateNote={handleUpdateNote}
           />
         )}
-        {activeTab === 'leads' && (
+        {shownTab === 'leads' && (
           <LeadsView
             state={effectiveState}
             onAddLead={handleAddLead}
@@ -667,13 +802,13 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
           />
         )}
-        {activeTab === 'clients' && (
+        {shownTab === 'clients' && (
           <ClientsView state={effectiveState} onSaveClient={handleSaveClient} />
         )}
-        {activeTab === 'products' && (
-          <ProductsView state={effectiveState} onSaveProduct={handleSaveProduct} onDeleteProduct={handleDeleteProduct} />
+        {shownTab === 'products' && (
+          <ProductsView state={effectiveState} onSaveProduct={handleSaveProduct} onDeleteProduct={handleDeleteProduct} canEdit={!!navPerms?.editProducts} />
         )}
-        {activeTab === 'tasks' && (
+        {shownTab === 'tasks' && (
           <TasksView
             state={effectiveState}
             onAddTask={handleAddTask}
@@ -681,9 +816,9 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
           />
         )}
-        {activeTab === 'data'     && <DataView      state={effectiveState} />}
-        {activeTab === 'chat'     && <ChatView      state={effectiveState} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
-        {activeTab === 'courses'  && (
+        {shownTab === 'data'     && <DataView      state={effectiveState} />}
+        {shownTab === 'chat'     && <ChatView      state={effectiveState} onSendMessage={handleSendMessage} onMarkRead={handleMarkRead} />}
+        {shownTab === 'courses'  && (
           <Suspense fallback={
             <div className="flex items-center justify-center h-64 text-indigo-600">
               <span className="animate-pulse text-4xl">📚</span>
@@ -700,12 +835,19 @@ export default function App() {
               onAddContentItem={handleAddContentItem}
               onUpdateContentItem={handleUpdateContentItem}
               onDeleteContentItem={handleDeleteContentItem}
+              readOnly={!navPerms?.editCourses}
             />
           </Suspense>
         )}
-        {activeTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
-        {activeTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
+        {shownTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
+        {shownTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg" dir="rtl" role="status">
+          {toast}
+        </div>
+      )}
 
       {/* Client onboarding popup */}
       {pendingOnboarding && (

@@ -5,6 +5,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateRequest } from './_lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
+import { permsFor } from './_lib/permissions';
+import { consumeAiQuota } from './_lib/aiUsage';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -16,10 +18,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const crmUser = await validateRequest(req.headers.authorization);
   if (!crmUser) return res.status(401).json({ error: 'Unauthorized' });
+  // כל הפעלה עולה כסף — רק תפקידים עם לשונית שיווק (מנהל, ניהול משרד)
+  if (!permsFor(crmUser.role)?.marketing) return res.status(403).json({ error: 'Not allowed' });
 
   const { rawContent, ctaType, weekDate, knowledgeBase } = req.body ?? {};
   if (!rawContent || !ctaType) {
     return res.status(400).json({ error: 'rawContent and ctaType are required' });
+  }
+
+  try {
+    const quota = await consumeAiQuota();
+    if (!quota.ok) {
+      return res.status(429).json({
+        error: 'daily_limit',
+        message: `הגעתם למכסה היומית (${quota.limit} הפעלות). אפשר להמשיך מחר.`,
+      });
+    }
+  } catch (err) {
+    console.error('[marketing-generate] quota check failed:', err);
+    return res.status(500).json({ error: 'Failed to generate messages' });
   }
 
   const knowledge: KnowledgeItem[] = knowledgeBase ?? [];
@@ -94,6 +111,6 @@ ${ctaLabels[ctaType] ?? ctaType}
     return res.status(200).json({ messages });
   } catch (err) {
     console.error('[marketing-generate] Claude API error:', err);
-    return res.status(500).json({ error: 'Failed to generate messages', details: String(err) });
+    return res.status(500).json({ error: 'Failed to generate messages' });
   }
 }

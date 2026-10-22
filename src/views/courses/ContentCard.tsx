@@ -27,6 +27,7 @@ interface ContentCardProps {
   onDelete: () => void;
   onRename: (title: string) => void;
   onUpdateItem: (updates: Partial<ContentItem>) => void;
+  readOnly?: boolean;
 }
 
 function canUseRenderedDeckPreview(thumbnailsCount: number, slideCount: number): boolean {
@@ -41,7 +42,7 @@ function fileNameFromItem(item: ContentItem): string {
   return item.title;
 }
 
-export default function ContentCard({ item, onDelete, onRename, onUpdateItem }: ContentCardProps) {
+export default function ContentCard({ item, onDelete, onRename, onUpdateItem, readOnly = false }: ContentCardProps) {
   const [lightboxPage, setLightboxPage] = useState<number | null>(null);
   const [hovered, setHovered]           = useState(false);
   const [renaming, setRenaming]         = useState(false);
@@ -183,6 +184,7 @@ export default function ContentCard({ item, onDelete, onRename, onUpdateItem }: 
             </p>
           </div>
 
+          {!readOnly && (<>
           {/* Actions */}
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0">
             <button
@@ -196,6 +198,7 @@ export default function ContentCard({ item, onDelete, onRename, onUpdateItem }: 
               className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 text-xs"
             >🗑️</button>
           </div>
+          </>)}
         </div>
 
         {/* ── Body ────────────────────────────────────────────────────── */}

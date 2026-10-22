@@ -1,5 +1,6 @@
 /**
- * לוח הגדרות — מנהל בלבד.
+ * לוח הגדרות — מנהל וניהול משרד.
+ * משתמשים ועיצוב — מנהל בלבד (אחרת ניהול משרד יכול לשנות לעצמו תפקיד).
  * 7 לשוניות: סטטוסים, רשימות בחירה, שדות מותאמים,
  * משתמשים, אוטומציות, ממשק, עיצוב.
  */
@@ -9,6 +10,7 @@ import { uid, DEFAULT_LABELS } from '../utils';
 import { Btn, Input, SelectInput, ConfirmDialog, Toggle } from '../ui';
 import { apiCreateUser, apiDeleteUser, apiChangeUserPassword, apiUpdateUser } from '../api';
 import DesignEditor from './DesignEditor';
+import { ROLES, ROLE_LABELS, isRole, permsOf, tabsFor } from '../permissions';
 
 // ─── Statuses Tab ──────────────────────────────────────────────────────────────
 
@@ -215,8 +217,11 @@ const ALL_TABS_PERMS = [
   { id: 'data',     icon: '📊', label: 'נתונים' },
   { id: 'chat',     icon: '💬', label: "צ'אט"   },
   { id: 'courses',  icon: '📚', label: 'קורסים' },
+  { id: 'marketing', icon: '📣', label: 'שיווק' },
 ];
-const DEFAULT_TABS = ALL_TABS_PERMS.map(t => t.id);
+
+/** בחלון ההרשאות מוצגות רק הלשוניות שהתפקיד מאפשר — אפשר לצמצם, לא להרחיב */
+const tabsForRole = (role: string) => ALL_TABS_PERMS.filter(t => (tabsFor(role) as string[]).includes(t.id));
 
 // ── UserCard — כרטיס משתמש בודד (תצוגה + עריכה) ────────────────────────────
 
@@ -263,9 +268,10 @@ function UserCard({
     setEditing(false);
   }
 
-  const roleColor = u.role === 'admin'
-    ? 'bg-purple-100 text-purple-700'
-    : 'bg-blue-100 text-blue-700';
+  const roleColor = u.role === 'admin'          ? 'bg-purple-100 text-purple-700'
+                  : u.role === 'office_manager' ? 'bg-amber-100 text-amber-700'
+                  : u.role === 'secretary'      ? 'bg-emerald-100 text-emerald-700'
+                  :                               'bg-blue-100 text-blue-700';
 
   const inputCls = 'w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white';
 
@@ -283,7 +289,7 @@ function UserCard({
           <p className="text-xs text-gray-500 truncate leading-tight">{u.email}</p>
         </div>
         <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${roleColor}`}>
-          {u.role === 'admin' ? 'מנהל' : 'נציג'}
+          {isRole(u.role) ? ROLE_LABELS[u.role] : 'ללא תפקיד'}
         </span>
         {isMe && <span className="text-xs text-emerald-600 font-semibold shrink-0">● אתה</span>}
       </div>
@@ -317,8 +323,7 @@ function UserCard({
             <div>
               <label className="block text-xs text-gray-500 mb-1">תפקיד</label>
               <select value={role} onChange={e => setRole(e.target.value as User['role'])} className={inputCls}>
-                <option value="salesperson">נציג</option>
-                <option value="admin">מנהל</option>
+                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
             <div>
@@ -396,7 +401,7 @@ function UsersTab({
 
   // ── מודל הרשאות ──
   const [permTarget,   setPermTarget]   = useState<User | null>(null);
-  const [selectedTabs, setSelectedTabs] = useState<string[]>(DEFAULT_TABS);
+  const [selectedTabs, setSelectedTabs] = useState<string[]>([]);
 
   // ── מחיקה ──
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -422,7 +427,7 @@ function UsersTab({
     const trimName  = newName.trim();
     const trimEmail = newEmail.trim();
     if (!trimName || !trimEmail) { setCreateError('שם ומייל הם שדות חובה.'); return; }
-    if (newPassword.length < 6)  { setCreateError('הסיסמא חייבת להכיל לפחות 6 תווים.'); return; }
+    if (newPassword.length < 8)  { setCreateError('הסיסמא חייבת להכיל לפחות 8 תווים.'); return; }
 
     setCreating(true); setCreateError('');
 
@@ -450,16 +455,11 @@ function UsersTab({
     setNewName(''); setNewPhone(''); setNewEmail('');
     setNewRole('salesperson'); setNewRate('10'); setNewPassword('');
     setCreating(false);
-
-    // פתח הרשאות אוטומטית לנציגים
-    if (newRole !== 'admin') {
-      setSelectedTabs(DEFAULT_TABS);
-      setPermTarget(u);
-    }
+    // הלשוניות נקבעות לפי התפקיד; אפשר לצמצם אחר כך דרך "📋 הרשאות"
   }
 
   async function doChangePassword() {
-    if (!passTarget || newPass.length < 6) return;
+    if (!passTarget || newPass.length < 8) return;
     setPassSaving(true); setPassError('');
     const result = await apiChangeUserPassword(passTarget.id, newPass);
     setPassSaving(false);
@@ -469,7 +469,7 @@ function UsersTab({
   }
 
   function openChangePerms(u: User) {
-    setSelectedTabs(u.allowedTabs ?? DEFAULT_TABS);
+    setSelectedTabs(u.allowedTabs ?? tabsForRole(u.role).map(t => t.id));
     setPermTarget(u);
   }
 
@@ -540,8 +540,7 @@ function UsersTab({
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">תפקיד</label>
               <select value={newRole} onChange={e => setNewRole(e.target.value as User['role'])} className={fieldCls}>
-                <option value="salesperson">נציג מכירות</option>
-                <option value="admin">מנהל מערכת</option>
+                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
           </div>
@@ -563,16 +562,16 @@ function UsersTab({
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 סיסמא ראשונית *
-                {newPassword.length > 0 && newPassword.length < 6 && (
-                  <span className="text-red-500 mr-1">(לפחות 6 תווים)</span>
+                {newPassword.length > 0 && newPassword.length < 8 && (
+                  <span className="text-red-500 mr-1">(לפחות 8 תווים)</span>
                 )}
               </label>
               <div className="relative">
                 <input
                   type={showNewPass ? 'text' : 'password'}
                   value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                  placeholder="לפחות 6 תווים"
-                  className={fieldCls + ' pl-10 ' + (newPassword.length > 0 && newPassword.length < 6 ? 'border-red-400 ring-red-400' : '')}
+                  placeholder="לפחות 8 תווים"
+                  className={fieldCls + ' pl-10 ' + (newPassword.length > 0 && newPassword.length < 8 ? 'border-red-400 ring-red-400' : '')}
                   dir="ltr" />
                 <button type="button" onClick={() => setShowNewPass(p => !p)}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-base leading-none">
@@ -589,7 +588,7 @@ function UsersTab({
           )}
 
           <button onClick={addUser}
-            disabled={!newName.trim() || !newEmail.trim() || newPassword.length < 6 || creating}
+            disabled={!newName.trim() || !newEmail.trim() || newPassword.length < 8 || creating}
             className="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold
                        hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             {creating
@@ -622,7 +621,7 @@ function UsersTab({
                     <input
                       type={showPass ? 'text' : 'password'}
                       value={newPass} onChange={e => setNewPass(e.target.value)}
-                      placeholder="לפחות 6 תווים" autoFocus
+                      placeholder="לפחות 8 תווים" autoFocus
                       className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 pl-12"
                       dir="ltr"
                       onKeyDown={e => e.key === 'Enter' && doChangePassword()} />
@@ -639,7 +638,7 @@ function UsersTab({
                 )}
                 <div className="flex gap-3">
                   <button onClick={doChangePassword}
-                    disabled={newPass.length < 6 || passSaving}
+                    disabled={newPass.length < 8 || passSaving}
                     className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold
                                hover:bg-blue-700 disabled:opacity-50 transition-colors">
                     {passSaving ? '⏳ שומר...' : 'שמור סיסמא'}
@@ -666,7 +665,7 @@ function UsersTab({
               </p>
             </div>
             <div className="space-y-1.5 max-h-80 overflow-y-auto">
-              {ALL_TABS_PERMS.map(tab => (
+              {tabsForRole(permTarget.role).map(tab => (
                 <label key={tab.id}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
                   <input type="checkbox"
@@ -918,7 +917,8 @@ export default function SettingsPanel({
   const [tab, setTab] = useState<'statuses' | 'dropdowns' | 'fields' | 'users' | 'automations' | 'interface' | 'design'>('statuses');
 
   const currentUser = state.users.find(u => u.id === state.currentUserId);
-  // TEMP BYPASS — להחזיר את הבדיקה אחרי שהמנהל יתקן את התפקיד שלו
+  const canManageUsers = !!permsOf(state)?.manageUsers;
+  // הגישה ללשונית ההגדרות עצמה נקבעת לפי התפקיד (App.tsx) — כאן רק מה שבתוכה
   // if (currentUser?.role !== 'admin') {
   //   return (
   //     <div className="flex items-center justify-center py-20 text-center">
@@ -931,7 +931,7 @@ export default function SettingsPanel({
   //   );
   // }
 
-  const TABS = [
+  const TABS = ([
     { id: 'statuses',    label: '🏷️ סטטוסים'   },
     { id: 'dropdowns',   label: '📋 רשימות'     },
     { id: 'fields',      label: '🔧 שדות'       },
@@ -939,7 +939,7 @@ export default function SettingsPanel({
     { id: 'automations', label: '🤖 אוטומציות'  },
     { id: 'interface',   label: '🖥️ ממשק'       },
     { id: 'design',      label: '🎨 עיצוב'      },
-  ] as const;
+  ] as const).filter(t => canManageUsers || (t.id !== 'users' && t.id !== 'design'));
 
   return (
     <div>
@@ -961,10 +961,10 @@ export default function SettingsPanel({
         {tab === 'statuses'    && <StatusesTab    state={state} onUpdate={onUpdate} />}
         {tab === 'dropdowns'   && <DropdownsTab   state={state} onUpdate={onUpdate} />}
         {tab === 'fields'      && <FieldsTab      state={state} onUpdate={onUpdate} />}
-        {tab === 'users'       && <UsersTab       state={state} onUpdate={onUpdate} onViewAs={onViewAs} />}
+        {tab === 'users' && canManageUsers && <UsersTab       state={state} onUpdate={onUpdate} onViewAs={onViewAs} />}
         {tab === 'automations' && <AutomationsTab state={state} onUpdate={onUpdate} />}
         {tab === 'interface'   && <InterfaceTab   state={state} onUpdate={onUpdate} />}
-        {tab === 'design'      && <DesignEditor />}
+        {tab === 'design' && canManageUsers && <DesignEditor />}
       </div>
     </div>
   );

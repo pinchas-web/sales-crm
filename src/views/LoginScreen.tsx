@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { apiForgotPassword, apiRegister, supabase } from '../api';
+import { apiForgotPassword, supabase } from '../api';
 
-type LoginMode = 'login' | 'register' | 'forgot' | 'sent' | 'registered';
+/** מספר הוואטסאפ של המנהל (בפורמט 9725XXXXXXXX), לכפתור "פנה למנהל". מוגדר ב-Vercel. */
+const ADMIN_WHATSAPP = (import.meta.env.VITE_ADMIN_WHATSAPP as string | undefined)?.replace(/\D/g, '') ?? '';
+
+type LoginMode = 'login' | 'forgot' | 'sent';
 
 function ErrorBox({ message }: { message: string }) {
   return (
@@ -30,10 +33,8 @@ function Spinner({ text }: { text: string }) {
 
 export default function LoginScreen({ initialMessage = '' }: { initialMessage?: string }) {
   const [mode, setMode] = useState<LoginMode>('login');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
@@ -115,47 +116,12 @@ export default function LoginScreen({ initialMessage = '' }: { initialMessage?: 
 
     const result = await apiForgotPassword(email.trim().toLowerCase());
     if ('error' in result) {
-      if (result.error.includes('not approved')) {
-        setError('המייל הזה עדיין לא מאושר במערכת. מנהל צריך להוסיף אותו במסך המשתמשים.');
-      } else {
-        setError('לא הצלחנו לשלוח מייל איפוס כרגע. בדוק את הגדרות המייל ב-Supabase או פנה למנהל.');
-      }
+      setError('לא הצלחנו לשלוח מייל איפוס כרגע. נסה שוב בעוד כמה דקות או פנה למנהל.');
     } else {
       setMode('sent');
     }
 
     setLoading(false);
-  }
-
-  async function handleRegister(e: FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !password) return;
-    if (password.length < 6) {
-      setError('הסיסמה חייבת להכיל לפחות 6 תווים.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('הסיסמאות אינן תואמות.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    const result = await apiRegister({
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      password,
-    });
-    setLoading(false);
-
-    if ('error' in result) {
-      setError(result.error.includes('already') ? 'המייל כבר רשום. נסה להתחבר או פנה למנהל.' : result.error);
-      return;
-    }
-
-    setPassword('');
-    setConfirmPassword('');
-    setMode('registered');
   }
 
   return (
@@ -166,36 +132,21 @@ export default function LoginScreen({ initialMessage = '' }: { initialMessage?: 
           <h1 className="text-2xl font-bold text-white">מערכת CRM</h1>
           <p className="text-white/70 text-sm mt-1">
             {mode === 'login' && 'כניסה למשתמשים מאושרים בלבד'}
-            {mode === 'register' && 'בקשת גישה למערכת'}
             {mode === 'forgot' && 'איפוס סיסמה'}
             {mode === 'sent' && 'בדוק את תיבת הדואר שלך'}
-            {mode === 'registered' && 'הבקשה נשלחה'}
           </p>
         </div>
 
         {mode === 'sent' && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 text-center space-y-4">
             <div className="text-5xl">📧</div>
-            <p className="text-gray-800 font-semibold">שלחנו מייל לאיפוס סיסמה</p>
+            <p className="text-gray-800 font-semibold">אם המייל רשום במערכת, שלחנו אליו קישור</p>
             <p className="text-gray-500 text-sm">
               שלחנו ל-<span className="font-medium text-gray-700" dir="ltr">{email}</span>
               קישור לקביעת סיסמה חדשה.
             </p>
             <button onClick={() => switchMode('login')} className="text-blue-600 text-sm font-medium hover:underline">
               חזרה לדף הכניסה
-            </button>
-          </div>
-        )}
-
-        {mode === 'registered' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center space-y-4">
-            <div className="text-5xl">✅</div>
-            <p className="text-gray-800 font-semibold">בקשת הגישה נקלטה</p>
-            <p className="text-gray-500 text-sm">
-              מנהל צריך לאשר את המייל שלך במסך המשתמשים. אחרי האישור תוכל להיכנס עם מייל וסיסמה או עם Google.
-            </p>
-            <button onClick={() => switchMode('login')} className="text-blue-600 text-sm font-medium hover:underline">
-              חזרה לכניסה
             </button>
           </div>
         )}
@@ -216,47 +167,6 @@ export default function LoginScreen({ initialMessage = '' }: { initialMessage?: 
             <button type="button" onClick={() => switchMode('login')}
               className="w-full text-sm text-gray-500 hover:text-gray-700 transition-colors">
               חזרה לכניסה
-            </button>
-          </form>
-        )}
-
-        {mode === 'register' && (
-          <form onSubmit={handleRegister} className="bg-white rounded-2xl shadow-2xl p-8 space-y-4">
-            <InfoBox message="ההרשמה לא פותחת גישה אוטומטית. מנהל חייב לאשר את המייל במסך המשתמשים." />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">שם מלא</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="שם מלא" required autoComplete="name" className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">כתובת מייל</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="your@email.com" required autoComplete="email" className={inputCls} dir="ltr" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">סיסמה</label>
-                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                  placeholder="לפחות 6 תווים" required autoComplete="new-password" className={inputCls} dir="ltr" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">אימות</label>
-                <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="שוב" required autoComplete="new-password" className={inputCls} dir="ltr" />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-gray-500">
-              <input type="checkbox" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />
-              הצג סיסמה
-            </label>
-            {error && <ErrorBox message={error} />}
-            <button type="submit" disabled={loading || !name.trim() || !email.trim() || password.length < 6}
-              className="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md">
-              {loading ? <Spinner text="שולח בקשה..." /> : 'שלח בקשת גישה'}
-            </button>
-            <button type="button" onClick={() => switchMode('login')}
-              className="w-full text-sm text-gray-500 hover:text-gray-700 transition-colors">
-              כבר יש לי משתמש
             </button>
           </form>
         )}
@@ -323,10 +233,18 @@ export default function LoginScreen({ initialMessage = '' }: { initialMessage?: 
               {loading ? <Spinner text="מתחבר..." /> : 'כניסה למערכת'}
             </button>
 
-            <button type="button" onClick={() => switchMode('register')}
-              className="w-full text-sm text-gray-500 hover:text-gray-700 transition-colors">
-              אין לי משתמש, שלח בקשת גישה
-            </button>
+            <p className="text-center text-sm text-gray-500">
+              אין לך משתמש?{' '}
+              {ADMIN_WHATSAPP ? (
+                <a href={`https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('היי, אשמח לקבל משתמש למערכת ה-CRM')}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-blue-600 font-medium hover:underline">
+                  פנה למנהל בוואטסאפ
+                </a>
+              ) : (
+                <span className="font-medium text-gray-700">פנה למנהל המערכת</span>
+              )}
+            </p>
           </form>
         )}
       </div>
@@ -349,7 +267,7 @@ export function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
   async function handleReset(e: FormEvent) {
     e.preventDefault();
     if (password !== confirm) { setError('הסיסמאות אינן תואמות.'); return; }
-    if (password.length < 6) { setError('הסיסמה חייבת להכיל לפחות 6 תווים.'); return; }
+    if (password.length < 8) { setError('הסיסמה חייבת להכיל לפחות 8 תווים.'); return; }
 
     setLoading(true);
     setError('');
@@ -389,7 +307,7 @@ export function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">סיסמה חדשה</label>
                 <div className="relative">
                   <input type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                    placeholder="לפחות 6 תווים" required autoComplete="new-password" className={inputCls + ' pr-12'} dir="ltr" />
+                    placeholder="לפחות 8 תווים" required autoComplete="new-password" className={inputCls + ' pr-12'} dir="ltr" />
                   <button type="button" onClick={() => setShowPass(p => !p)}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
                     tabIndex={-1}>

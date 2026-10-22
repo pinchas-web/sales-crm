@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { User } from '@supabase/supabase-js';
 import { validateRequest } from '../_lib/auth';
 import { supabaseAdmin } from '../_lib/supabaseAdmin';
+import { isRole } from '../_lib/permissions';
 
 async function findAuthUserByEmail(email: string): Promise<User | null> {
   let page = 1;
@@ -31,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { email, crm_user_id, role, password } = req.body as {
     email: string;
     crm_user_id: string;
-    role: 'admin' | 'salesperson';
+    role: string;
     password: string;
   };
 
@@ -40,8 +41,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!isRole(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
   const { data: existingCrmId } = await supabaseAdmin

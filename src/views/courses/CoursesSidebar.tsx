@@ -24,6 +24,7 @@ interface CoursesSidebarProps {
   onAddLesson:     (lesson: Lesson) => void;
   onUpdateLesson:  (id: string, updates: Partial<Lesson>) => void;
   onDeleteLesson:  (id: string) => void;
+  readOnly?:       boolean;
 }
 
 export default function CoursesSidebar({
@@ -32,6 +33,7 @@ export default function CoursesSidebar({
   onSelectCourse, onSelectLesson,
   onAddCourse, onUpdateCourse, onDeleteCourse,
   onAddLesson, onUpdateLesson, onDeleteLesson,
+  readOnly = false,
 }: CoursesSidebarProps) {
   const [addingCourse, setAddingCourse]   = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
@@ -88,6 +90,7 @@ export default function CoursesSidebar({
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
         <h2 className="text-sm font-bold text-gray-700">קורסים</h2>
+        {!readOnly && (
         <button
           onClick={() => setAddingCourse(true)}
           className="p-1.5 rounded-lg hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 transition-colors text-sm font-bold"
@@ -95,6 +98,7 @@ export default function CoursesSidebar({
         >
           +
         </button>
+        )}
       </div>
 
       {/* New course form */}
@@ -165,6 +169,7 @@ export default function CoursesSidebar({
 
                 {/* Course actions */}
                 <div className="opacity-0 group-hover/course:opacity-100 flex gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                  {!readOnly && <>
                   <button
                     onClick={() => startRename('course', course.id, course.title)}
                     className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 text-xs"
@@ -175,6 +180,7 @@ export default function CoursesSidebar({
                     className="p-0.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 text-xs"
                     title="מחק קורס"
                   >🗑️</button>
+                  </>}
                 </div>
               </div>
 
@@ -208,6 +214,7 @@ export default function CoursesSidebar({
                         )}
 
                         <div className="opacity-0 group-hover/lesson:opacity-100 flex gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                          {!readOnly && <>
                           <button
                             onClick={() => startRename('lesson', lesson.id, lesson.title)}
                             className="p-0.5 rounded hover:bg-gray-200 text-gray-300 hover:text-gray-500 text-[10px]"
@@ -216,11 +223,13 @@ export default function CoursesSidebar({
                             onClick={() => { if (confirm(`למחוק את "${lesson.title}"?`)) onDeleteLesson(lesson.id); }}
                             className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 text-[10px]"
                           >🗑️</button>
+                          </>}
                         </div>
                       </div>
                     );
                   })}
 
+                  {!readOnly && (<>
                   {/* Add lesson */}
                   {addingLessonFor === course.id ? (
                     <div className="px-2 py-1.5 mx-1">
@@ -243,6 +252,7 @@ export default function CoursesSidebar({
                       <span>שיעור חדש</span>
                     </button>
                   )}
+                  </>)}
                 </div>
               )}
             </div>
