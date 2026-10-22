@@ -14,8 +14,10 @@ import {
   ACTIVITY_ICONS, ACTIVITY_LABELS,
   uid, formatDate, formatDateTime, openGoogleCalendar, openWhatsApp, findDuplicates,
 } from '../utils';
-import { Btn, Input, SelectInput, Modal, Badge, ScoreBadge, ConfirmDialog, Textarea, EmptyState } from '../ui';
+import { Btn, Input, SelectInput, Modal, ScoreBadge, ConfirmDialog, Textarea, EmptyState } from '../ui';
 import { permsOf } from '../permissions';
+import ProductInfoModal from './ProductInfoModal';
+import type { Product } from '../types';
 
 // ─── Activity type selector ───────────────────────────────────────────────────
 
@@ -111,6 +113,7 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
   const [taskAssignee,  setTaskAssignee ] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab,           setTab         ] = useState<'info' | 'activity' | 'tasks'>('info');
+  const [infoProduct,   setInfoProduct ] = useState<Product | null>(null);
 
   useEffect(() => {
     if (lead) {
@@ -212,17 +215,33 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
                       <div key={k}><span className="text-gray-500">{k}: </span><span className="font-medium text-gray-800">{v}</span></div>
                     ))}
                   </div>
-                  {lead.interestedIn.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-500 mb-1">📦 מתעניין ב:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {lead.interestedIn.map(pid => {
-                          const p = state.products.find(x => x.id === pid);
-                          return p ? <Badge key={pid} label={p.name} colorClass="bg-indigo-100 text-indigo-700" /> : null;
-                        })}
+                  {/* ידע על המוצרים בכף היד — לחיצה פותחת תיאור, סילבוס וממליצים */}
+                  {(() => {
+                    const interested = state.products.filter(p => lead.interestedIn.includes(p.id));
+                    const others     = state.products.filter(p => p.active && !lead.interestedIn.includes(p.id));
+                    const chip = (p: Product, cls: string) => (
+                      <button key={p.id} onClick={() => setInfoProduct(p)}
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${cls}`}>
+                        📦 {p.name} · ₪{p.price.toLocaleString('he-IL')}
+                      </button>
+                    );
+                    return (interested.length > 0 || others.length > 0) && (
+                      <div className="mb-3 space-y-2">
+                        {interested.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">מתעניין ב (לחץ למידע מלא):</p>
+                            <div className="flex flex-wrap gap-1">{interested.map(p => chip(p, 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'))}</div>
+                          </div>
+                        )}
+                        {others.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">מוצרים נוספים:</p>
+                            <div className="flex flex-wrap gap-1">{others.map(p => chip(p, 'bg-gray-100 text-gray-700 hover:bg-gray-200'))}</div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>✏️ ערוך פרטים</Btn>
                 </>
               )}
@@ -293,6 +312,7 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
         </div>
       </div>
 
+      <ProductInfoModal product={infoProduct} onClose={() => setInfoProduct(null)} />
       <ConfirmDialog open={confirmDelete} message={`למחוק את "${lead.name}"?`}
         onConfirm={() => { onDeleteLead(lead.id); onClose(); }} onCancel={() => setConfirmDelete(false)} />
     </div>

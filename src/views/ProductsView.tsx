@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { AppState, Product, ProductTestimonial, OnboardingStep } from '../types';
 import { uid } from '../utils';
 import { Btn, Input, Modal, Textarea, EmptyState, Toggle, ConfirmDialog } from '../ui';
+import ProductInfoModal from './ProductInfoModal';
 
 // ─── Product Card ─────────────────────────────────────────────────────────────
 
@@ -260,13 +261,15 @@ export default function ProductsView({
   state: AppState;
   onSaveProduct: (p: Product) => void;
   onDeleteProduct: (id: string) => void;
-  /** מנהל וניהול משרד עורכים; מזכירות צופה בלבד */
+  /** מנהל וניהול משרד עורכים; נציג ומזכירות צופים בלבד (כרטיס מידע, בלי עורך) */
   canEdit: boolean;
 }) {
   const [selected, setSelected] = useState<Product | 'new' | null>(null);
 
   const modalProduct: Product | null = selected === 'new' ? null : selected;
   const showModal = selected !== null;
+  // מי שלא עורך רואה רק מוצרים פעילים — מה שאפשר למכור היום
+  const products = canEdit ? state.products : state.products.filter(p => p.active);
 
   return (
     <div>
@@ -275,12 +278,12 @@ export default function ProductsView({
         {canEdit && <Btn onClick={() => setSelected('new')}>+ מוצר חדש</Btn>}
       </div>
 
-      {state.products.length === 0 ? (
+      {products.length === 0 ? (
         <EmptyState icon="📦" title="אין מוצרים עדיין" subtitle="הוסף את המוצר הראשון שלך"
           action={canEdit ? { label: '+ מוצר חדש', onClick: () => setSelected('new') } : undefined} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {state.products.map(p => (
+          {products.map(p => (
             <ProductCard key={p.id} product={p} onClick={() => setSelected(p)} />
           ))}
           {canEdit && (
@@ -293,7 +296,10 @@ export default function ProductsView({
         </div>
       )}
 
-      {showModal && (
+      {showModal && !canEdit && (
+        <ProductInfoModal product={modalProduct} onClose={() => setSelected(null)} />
+      )}
+      {showModal && canEdit && (
         <ProductDetailModal
           product={modalProduct}
           onClose={() => setSelected(null)}

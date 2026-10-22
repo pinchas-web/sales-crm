@@ -139,7 +139,7 @@ describe('נציג מכירות — מה הוא מקבל', () => {
     expect(body.contentItems).toEqual([]);
     expect(body.marketingKnowledge).toEqual([]);
     expect(body.marketingMessages).toEqual([]);
-    expect(ids(body.navConfig)).toEqual(['chat', 'home', 'leads', 'tasks']);
+    expect(ids(body.navConfig)).toEqual(['chat', 'home', 'leads', 'products', 'tasks']);
   });
   it('לא רואה עמלות, יעדים, מיילים וטלפונים של נציגים אחרים', async () => {
     SALES();
@@ -177,6 +177,13 @@ describe('נציג מכירות — מה הוא מקבל', () => {
     expect(r.body.refused).toBe(2);
     expect(row('courses', 'co1').title).toBe('קורס 1');
     expect(row('lessons', 'le1')).toBeDefined();
+  });
+  it('רואה את המוצרים (כדי למכור) אבל לא יכול לשנות אותם', async () => {
+    SALES();
+    const { body } = await get();
+    expect(body.products).toEqual([{ id: 'p1', name: 'ביזנסתרפיה', price: 5700 }]);
+    await patch({}, { products: [{ id: 'p1', name: 'ביזנסתרפיה', price: 1 }] });
+    expect((row('crm_config', CONFIG_ID).products as Any)[0].price).toBe(5700);
   });
   it('לא יכול לשנות שיווק או הגדרות', async () => {
     SALES();

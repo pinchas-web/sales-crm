@@ -81,7 +81,8 @@ export const PERMISSIONS: Record<Role, Permissions> = {
     configKeys: [],
   },
   salesperson: {
-    tabs: ['home', 'leads', 'tasks', 'chat'],
+    // מוצרים — צפייה בלבד: תיאור, סילבוס וממליצים בכף היד, כדי למכור
+    tabs: ['home', 'leads', 'tasks', 'chat', 'products'],
     allRecords: false, deleteLeads: false,
     viewCourses: false, editCourses: false, marketing: false, editProducts: false,
     seeAllMoney: false, manageUsers: false,
