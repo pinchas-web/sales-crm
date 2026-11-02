@@ -112,6 +112,12 @@ describe('טבלת ההרשאות', () => {
   it('"לשוניות מותרות" רק מצמצמות בתוך התפקיד — אי אפשר לתת לנציג קורסים', () => {
     expect(tabsFor('salesperson', ['leads', 'courses', 'marketing'])).toEqual(['leads']);
   });
+  it('מחלקת פיננסים פתוחה רק למנהל ולניהול משרד', () => {
+    expect(tabsFor('admin')).toContain('finance');
+    expect(tabsFor('office_manager')).toContain('finance');
+    expect(tabsFor('secretary')).not.toContain('finance');
+    expect(tabsFor('salesperson')).not.toContain('finance');
+  });
   it('ניהול משרד צופה בקורסים אבל לא עורך, ולא מנהל משתמשים', () => {
     expect(PERMISSIONS.office_manager.viewCourses).toBe(true);
     expect(PERMISSIONS.office_manager.editCourses).toBe(false);

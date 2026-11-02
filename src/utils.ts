@@ -80,7 +80,7 @@ export const DEFAULT_LABELS: Record<string, string> = {
   'tab.clients':         'קליטת לקוח',
   'tab.products':        'מוצרים',
   'tab.tasks':           'משימות',
-  'tab.data':            'נתונים',
+  'tab.data':            'דשבורד',
   'tab.chat':            'צ\'אט',
   'tab.settings':        'הגדרות',
   'kpi.active_leads':    'לידים פעילים',

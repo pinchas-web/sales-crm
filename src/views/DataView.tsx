@@ -1,5 +1,6 @@
 /**
- * לוח נתונים ואנליטיקה — 4 לשוניות: ביצועים, עמלות, pipeline, השוואת צוות.
+ * דשבורד — 3 לשוניות: ביצועים, pipeline, השוואת צוות.
+ * העמלות עברו למחלקת פיננסים (CommissionTab מיוצא לשם).
  * משתמש ב-Recharts לגרפים: AreaChart, BarChart, PieChart.
  */
 import { useState } from 'react';
@@ -140,7 +141,7 @@ function PerformanceTab({ state }: { state: AppState }) {
 
 // ─── Commission Tab ────────────────────────────────────────────────────────────
 
-function CommissionTab({ state }: { state: AppState }) {
+export function CommissionTab({ state }: { state: AppState }) {
   const [year, setYear] = useState(new Date().getFullYear());
 
   function getYearData(userId: string) {
@@ -430,11 +431,10 @@ function TeamTab({ state }: { state: AppState }) {
 // ─── Data View ────────────────────────────────────────────────────────────────
 
 export default function DataView({ state }: { state: AppState }) {
-  const [tab, setTab] = useState<'performance' | 'commission' | 'pipeline' | 'team'>('performance');
+  const [tab, setTab] = useState<'performance' | 'pipeline' | 'team'>('performance');
 
   const TABS = [
     { id: 'performance', label: '📈 ביצועים' },
-    { id: 'commission',  label: '💰 עמלות'  },
     { id: 'pipeline',    label: '🔄 Pipeline' },
     { id: 'team',        label: '👥 צוות'    },
   ] as const;
@@ -442,7 +442,7 @@ export default function DataView({ state }: { state: AppState }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-bold text-gray-800">📊 נתונים</h1>
+        <h1 className="text-xl font-bold text-gray-800">📊 דשבורד</h1>
       </div>
 
       {/* Tab bar */}
@@ -456,7 +456,6 @@ export default function DataView({ state }: { state: AppState }) {
       </div>
 
       {tab === 'performance' && <PerformanceTab state={state} />}
-      {tab === 'commission'  && <CommissionTab  state={state} />}
       {tab === 'pipeline'    && <PipelineTab    state={state} />}
       {tab === 'team'        && <TeamTab        state={state} />}
     </div>

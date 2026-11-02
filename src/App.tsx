@@ -11,6 +11,7 @@ import type { AppState, Lead, Activity, Task, Product, Client, ChatMessage, Pinn
 import { SEED_STATE } from './seed';
 import { uid, TODAY, getL, calcScore } from './utils';
 import { permsFor, tabsFor, ROLE_LABELS, isRole } from './permissions';
+import { DEPARTMENTS, SHARED_TABS } from './departments';
 
 import LoginScreen, { ResetPasswordScreen } from './views/LoginScreen';
 import HomePage      from './views/HomePage';
@@ -24,6 +25,7 @@ import DataView      from './views/DataView';
 import ChatView      from './views/ChatView';
 import SettingsPanel   from './views/SettingsPanel';
 import MarketingView   from './views/MarketingView';
+import FinanceView     from './views/FinanceView';
 
 // ─── State merge ──────────────────────────────────────────────────────────────
 
@@ -124,6 +126,25 @@ function ClientOnboardingPopup({ lead, state, onConfirm, onCancel }: {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Nav Button ───────────────────────────────────────────────────────────────
+
+function NavButton({ icon, label, active, onClick, badge }: {
+  icon: string; label: string; active: boolean; onClick: () => void; badge: number;
+}) {
+  return (
+    <button onClick={onClick} aria-current={active ? 'page' : undefined} title={label}
+      className={`relative brand-nav-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer select-none ${active ? 'brand-nav-active text-amber-100' : 'text-white/75 hover:text-white hover:bg-white/10'}`}>
+      <span className="text-sm">{icon}</span>
+      <span className="hidden md:inline">{label}</span>
+      {badge > 0 && (
+        <span className="absolute -top-1 -right-1 bg-gradient-to-tr from-amber-500 to-amber-300 text-black text-[10px] font-extrabold rounded-full min-w-4 h-4 px-1 flex items-center justify-center shadow-md animate-pulse">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -621,10 +642,11 @@ export default function App() {
     { id: 'clients',  icon: '🎓', defaultLabel: 'קליטה'   },
     { id: 'products', icon: '📦', defaultLabel: 'מוצרים'  },
     { id: 'tasks',    icon: '✅', defaultLabel: 'משימות'  },
-    { id: 'data',     icon: '📊', defaultLabel: 'נתונים'  },
+    { id: 'data',     icon: '📊', defaultLabel: 'דשבורד'  },
     { id: 'chat',     icon: '💬', defaultLabel: "צ'אט"    },
     { id: 'courses',   icon: '📚', defaultLabel: 'קורסים'  },
     { id: 'marketing', icon: '📣', defaultLabel: 'שיווק'   },
+    { id: 'finance',   icon: '💰', defaultLabel: 'פיננסים' },
     { id: 'settings',  icon: '⚙️', defaultLabel: 'הגדרות'  },
   ];
 
@@ -645,6 +667,19 @@ export default function App() {
 
   // לשונית שלא מותרת לא מוצגת בכלל — גם אם הגיעו אליה מקישור פנימי
   const shownTab = visibleTabs.some(t => t.id === activeTab) ? activeTab : (visibleTabs[0]?.id ?? '');
+
+  // התפריט: שכבה משותפת + מחלקות. מחלקה מוצגת רק אם התפקיד רואה לפחות תת-מחלקה אחת שלה.
+  const tabById  = (id: string) => visibleTabs.find(t => t.id === id);
+  const navShared = visibleTabs.filter(t => (SHARED_TABS as string[]).includes(t.id));
+  const navDepts  = DEPARTMENTS
+    .map(d => ({ ...d, sections: d.tabs.map(tabById).filter((t): t is typeof NAV_TABS[0] => !!t) }))
+    .filter(d => d.sections.length > 0);
+  const activeDept = navDepts.find(d => d.sections.some(t => t.id === shownTab));
+  const canOpenSettings = !!tabById('settings');
+  const tabLabel = (tab: typeof NAV_TABS[0]) => {
+    const custom = getLabel(`tab.${tab.id}`);
+    return custom === `tab.${tab.id}` ? tab.defaultLabel : custom;
+  };
 
   // לקוחות חדשים שעוד לא התחילו קליטה — מונה על לשונית הקליטה
   const newClients = state.clients.filter(c => !Object.values(c.onboardingProgress ?? {}).some(Boolean)).length;
@@ -742,34 +777,39 @@ export default function App() {
             </h1>
           </div>
           <nav className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide py-0.5">
-            {visibleTabs.map(tab => {
-              const isActive = shownTab === tab.id;
-              const custom = getLabel(`tab.${tab.id}`);
-              const label = custom === `tab.${tab.id}` ? tab.defaultLabel : custom;
-              const badge =
-                tab.id === 'chat'  ? unreadChat   :
-                tab.id === 'tasks' ? overdueTasks :
-                tab.id === 'clients' ? newClients : 0;
-              return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`relative brand-nav-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer select-none ${isActive ? 'brand-nav-active text-amber-100' : 'text-white/75 hover:text-white hover:bg-white/10'}`}>
-                  <span className="text-sm">{tab.icon}</span>
-                  <span className="hidden md:inline">{label}</span>
-                  {badge > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-gradient-to-tr from-amber-500 to-amber-300 text-black text-[10px] font-extrabold rounded-full min-w-4 h-4 px-1 flex items-center justify-center shadow-md animate-pulse">
-                      {badge > 9 ? '9+' : badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {navShared.map(tab => (
+              <NavButton key={tab.id} icon={tab.icon} label={tabLabel(tab)}
+                active={shownTab === tab.id} onClick={() => setActiveTab(tab.id)}
+                badge={tab.id === 'chat' ? unreadChat : tab.id === 'tasks' ? overdueTasks : 0} />
+            ))}
+            {navDepts.length > 0 && <span className="w-px h-5 bg-white/25 mx-1.5 shrink-0" aria-hidden="true" />}
+            {navDepts.map(dept => (
+              <NavButton key={dept.id} icon={dept.icon} label={dept.label}
+                active={activeDept?.id === dept.id} onClick={() => setActiveTab(dept.sections[0].id)}
+                badge={dept.sections.some(t => t.id === 'clients') ? newClients : 0} />
+            ))}
           </nav>
           {/* UserBadge */}
           <span className="text-[11px] text-white/70 whitespace-nowrap" title={saveStatus === 'error' ? 'השמירה נכשלה — ננסה שוב אוטומטית' : undefined}>
             {saveStatus === 'saving' ? 'שומר…' : saveStatus === 'error' ? '⚠️ לא נשמר' : '✓ נשמר'}
           </span>
+          {canOpenSettings && (
+            <button onClick={() => setActiveTab('settings')} title="הגדרות" aria-label="הגדרות"
+              className={`brand-nav-btn px-2 py-1.5 text-sm cursor-pointer select-none shrink-0 ${shownTab === 'settings' ? 'brand-nav-active' : 'hover:bg-white/10'}`}>
+              ⚙️
+            </button>
+          )}
           <UserBadge state={state} />
         </div>
+        {/* תתי המחלקה — רק למחלקה שיש בה יותר מאחת שהתפקיד רואה */}
+        {activeDept && activeDept.sections.length > 1 && (
+          <div className="max-w-screen-2xl mx-auto px-4 pb-2 flex items-center gap-1 overflow-x-auto scrollbar-hide">
+            {activeDept.sections.map(tab => (
+              <NavButton key={tab.id} icon={tab.icon} label={tabLabel(tab)}
+                active={shownTab === tab.id} onClick={() => setActiveTab(tab.id)} badge={0} />
+            ))}
+          </div>
+        )}
       </header>
       </div>{/* end sticky top wrapper */}
 
@@ -839,6 +879,7 @@ export default function App() {
             />
           </Suspense>
         )}
+        {shownTab === 'finance' && <FinanceView state={effectiveState} />}
         {shownTab === 'marketing' && <MarketingView state={effectiveState} onUpdate={handleUpdateState} />}
         {shownTab === 'settings' && <SettingsPanel state={state} onUpdate={handleUpdateState} onViewAs={id => { setViewAsId(id); setActiveTab('home'); }} />}
       </main>

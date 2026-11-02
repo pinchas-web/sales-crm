@@ -214,10 +214,11 @@ const ALL_TABS_PERMS = [
   { id: 'clients',  icon: '🎓', label: 'קליטה'  },
   { id: 'products', icon: '📦', label: 'מוצרים' },
   { id: 'tasks',    icon: '✅', label: 'משימות' },
-  { id: 'data',     icon: '📊', label: 'נתונים' },
+  { id: 'data',     icon: '📊', label: 'דשבורד' },
   { id: 'chat',     icon: '💬', label: "צ'אט"   },
   { id: 'courses',  icon: '📚', label: 'קורסים' },
   { id: 'marketing', icon: '📣', label: 'שיווק' },
+  { id: 'finance',  icon: '💰', label: 'פיננסים' },
 ];
 
 /** בחלון ההרשאות מוצגות רק הלשוניות שהתפקיד מאפשר — אפשר לצמצם, לא להרחיב */
@@ -815,8 +816,8 @@ function AutomationsTab({ state, onUpdate }: { state: AppState; onUpdate: (s: Ap
 function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppState) => void }) {
   const NAV_NAMES: Record<string, string> = {
     home: '🏠 ראשי', leads: '👤 לידים', clients: '🎓 קליטה', products: '📦 מוצרים',
-    tasks: '✅ משימות', data: '📊 נתונים', chat: '💬 צ\'אט', courses: '📚 קורסים',
-    marketing: '📣 שיווק', settings: '⚙️ הגדרות',
+    tasks: '✅ משימות', data: '📊 דשבורד', chat: '💬 צ\'אט', courses: '📚 קורסים',
+    marketing: '📣 שיווק', finance: '💰 פיננסים', settings: '⚙️ הגדרות',
   };
   const sorted = [...state.navConfig].sort((a, b) => a.order - b.order);
 
@@ -856,7 +857,8 @@ function InterfaceTab({ state, onUpdate }: { state: AppState; onUpdate: (s: AppS
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">סדר ונראות לשוניות ניווט</p>
+        <p className="text-sm font-semibold text-gray-700 mb-1">נראות לשוניות ניווט</p>
+        <p className="text-xs text-gray-500 mb-2">סדר המחלקות קבוע. הסדר כאן משפיע רק על הלשוניות המשותפות.</p>
         <div className="space-y-1.5">
           {sorted.map((tab, i) => (
             <div key={tab.id} className="flex items-center gap-2 bg-white rounded-xl border p-2.5">
