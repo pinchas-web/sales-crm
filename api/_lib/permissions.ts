@@ -21,7 +21,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export type TabId =
   | 'home' | 'leads' | 'clients' | 'products' | 'tasks'
-  | 'data' | 'chat' | 'courses' | 'marketing' | 'settings';
+  | 'data' | 'chat' | 'courses' | 'marketing' | 'finance' | 'settings';
 
 /** מפתחות הקונפיגורציה (ראו CONFIG_KEYS ב-src/sync.ts) */
 export type ConfigKey =
@@ -50,7 +50,7 @@ export interface Permissions {
 }
 
 const ALL_TABS: TabId[] = [
-  'home', 'leads', 'clients', 'products', 'tasks', 'data', 'chat', 'courses', 'marketing', 'settings',
+  'home', 'leads', 'clients', 'products', 'tasks', 'data', 'chat', 'courses', 'marketing', 'finance', 'settings',
 ];
 
 const OFFICE_CONFIG: ConfigKey[] = [

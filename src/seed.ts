@@ -25,6 +25,7 @@ export const SEED_STATE: AppState = {
     { id: 'courses',   visible: true,  order: 7 },
     { id: 'marketing', visible: true,  order: 8 },
     { id: 'settings',  visible: true,  order: 9 },
+    { id: 'finance',   visible: true,  order: 10 },
   ],
 
   users: [
