@@ -105,6 +105,14 @@ export interface OnboardingStep {
   defaultAssigneeRole?: UserRole;
 }
 
+export interface ProductDocument {
+  id: string;
+  title: string;
+  fileUrl: string;
+  fileKey?: string;
+  uploadedAt: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -115,6 +123,10 @@ export interface Product {
   imageDataUrl?: string;         // base64 stored in localStorage
   syllabusText?: string;
   contractText?: string;
+  /** קבצים שמורים למוצר (הסכם עבודה, מצגת, טפסים...) */
+  documents?: ProductDocument[];
+  /** תבנית הסכם דיגיטלי לחתימה מרחוק (ראו api/_lib/contractTypes.ts) */
+  contractTemplateId?: string;
   testimonials: ProductTestimonial[];
   onboardingSteps: OnboardingStep[];
   active: boolean;

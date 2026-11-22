@@ -14,7 +14,8 @@ import { permsFor }        from '../_lib/permissions';
 const BUCKET = 'course-files';
 
 /** תיקיות שהאפליקציה משתמשת בהן: lessons/<id>, thumbnails/<id>[/<id>], uploads */
-const FOLDER_RE = /^(uploads|lessons\/[\w-]+|thumbnails\/[\w-]+(\/[\w-]+)?)$/;
+const PRODUCT_FOLDER_RE = /^products\/[\w-]+$/;
+const FOLDER_RE = /^(uploads|lessons\/[\w-]+|thumbnails\/[\w-]+(\/[\w-]+)?|products\/[\w-]+)$/;
 const EXT_RE    = /^[a-z0-9]{1,8}$/;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,9 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const crmUser = await validateRequest(req.headers.authorization);
   if (!crmUser) return res.status(401).json({ error: 'Unauthorized' });
-  if (!permsFor(crmUser.role)?.editCourses) return res.status(403).json({ error: 'Not allowed' });
 
   const folder = typeof req.body?.folder === 'string' ? req.body.folder : 'uploads';
+  // מסמכי מוצר (products/<id>) — למי שעורך מוצרים; כל השאר — למי שעורך קורסים
+  const perms = permsFor(crmUser.role);
+  const allowed = PRODUCT_FOLDER_RE.test(folder) ? perms?.editProducts : perms?.editCourses;
+  if (!allowed) return res.status(403).json({ error: 'Not allowed' });
   const ext    = typeof req.body?.ext === 'string' ? req.body.ext.toLowerCase() : 'bin';
   if (!FOLDER_RE.test(folder) || !EXT_RE.test(ext)) {
     return res.status(400).json({ error: 'Invalid folder or extension' });

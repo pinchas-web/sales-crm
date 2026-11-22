@@ -60,6 +60,19 @@ export default function ProductInfoModal({ product, onClose }: { product: Produc
                 ? <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{product.syllabusText}</p>
                 : empty('אין עדיין סילבוס')}
             </div>
+            {(product.documents ?? []).length > 0 && (
+              <div>
+                <h4 className="field-label">מסמכים</h4>
+                <div className="space-y-1.5">
+                  {(product.documents ?? []).map(d => (
+                    <a key={d.id} href={d.fileUrl} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5 border text-sm font-medium text-blue-700 hover:bg-blue-50">
+                      📄 {d.title}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {product.contractText && (
               <div>
                 <h4 className="field-label">תנאים / הסכם</h4>

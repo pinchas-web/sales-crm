@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { StatePatch } from './sync';
 import type { UserRole } from './types';
+import type { ContractData, ContractRecord, ContractStatus } from '../api/_lib/contractTypes';
 
 // ── Supabase client ──────────────────────────────────────────────────────────
 // VITE_* משתנים נחשפים לדפדפן — anon key בלבד (לא service role!)
@@ -267,4 +268,43 @@ export async function apiDownloadCourseFile(fileKey: string): Promise<Blob> {
   }
 
   return data;
+}
+
+// ── הסכמים דיגיטליים ───────────────────────────────────────────────────────────
+
+
+export interface ContractSummary {
+  token: string; clientId: string; status: ContractStatus;
+  createdAt: string; viewedAt?: string; signedAt?: string;
+}
+
+async function contractsCall<T>(init: RequestInit & { query?: string } = {}): Promise<T> {
+  const res = await fetch(`/api/contracts${init.query ?? ''}`, { ...init, headers: await authHeaders() });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error ?? `שגיאה ${res.status}`);
+  return body as T;
+}
+
+export async function apiListContractSummaries(): Promise<ContractSummary[]> {
+  return (await contractsCall<{ contracts: ContractSummary[] }>()).contracts;
+}
+
+export async function apiListClientContracts(clientId: string): Promise<ContractRecord[]> {
+  return (await contractsCall<{ contracts: ContractRecord[] }>({ query: `?clientId=${encodeURIComponent(clientId)}` })).contracts;
+}
+
+export async function apiCreateContract(p: { clientId: string; leadId?: string; productId?: string; data: ContractData }): Promise<ContractRecord> {
+  return (await contractsCall<{ contract: ContractRecord }>({ method: 'POST', body: JSON.stringify({ action: 'create', ...p }) })).contract;
+}
+
+export async function apiUpdateContract(token: string, data: ContractData): Promise<ContractRecord> {
+  return (await contractsCall<{ contract: ContractRecord }>({ method: 'POST', body: JSON.stringify({ action: 'update', token, data }) })).contract;
+}
+
+export async function apiCancelContract(token: string): Promise<ContractRecord> {
+  return (await contractsCall<{ contract: ContractRecord }>({ method: 'POST', body: JSON.stringify({ action: 'cancel', token }) })).contract;
+}
+
+export async function apiContractPdfUrl(token: string): Promise<string> {
+  return (await contractsCall<{ url: string }>({ query: `?pdf=${token}` })).url;
 }
