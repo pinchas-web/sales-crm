@@ -205,7 +205,9 @@ export async function finalizeQ(token: string, opts: { baseUrl?: string; force?:
       if (text) { rec!.summary = { text, model: RULES_MODEL, createdAt: new Date().toISOString() }; rec!.summaryStatus = 'sent'; }
       else rec!.summaryStatus = 'skipped';
     };
-    if (!process.env.ANTHROPIC_API_KEY) ruleSummary();
+    // ברירת מחדל: הסיכום החינמי. סיכום של Claude רק אם הופעל במפורש (QUESTIONNAIRE_AI_SUMMARY=1),
+    // כי המפתח הקיים משמש גם את מחולל המסרים, ולא רוצים חיוב או שגיאות בלי כוונה.
+    if (!process.env.ANTHROPIC_API_KEY || process.env.QUESTIONNAIRE_AI_SUMMARY !== '1') ruleSummary();
     else {
       try {
         const quota = await consumeAiQuota();

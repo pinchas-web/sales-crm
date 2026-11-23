@@ -23,11 +23,12 @@
 
 Vercel ← הפרויקט ← Settings ← Environment Variables. אחרי הוספה: Redeploy.
 
-### 1. מייל (Gmail)
+### 1. מייל
 | משתנה | ערך |
 |---|---|
-| `SMTP_USER` | כתובת הג'ימייל השולחת |
-| `SMTP_PASS` | "סיסמת אפליקציה" מגוגל (myaccount.google.com ← אבטחה ← סיסמאות לאפליקציות). לא הסיסמה הרגילה. |
+| `SMTP_HOST` / `SMTP_PORT` | שרת הדואר (אצל פנחס: `mail.pinchashorvitz.co.il`, `465`) |
+| `SMTP_USER` | כתובת המייל השולחת |
+| `SMTP_PASS` | הסיסמה של תיבת המייל הזו |
 | `CONTRACT_NOTIFY_EMAIL` | לאן לשלוח לפנחס (לא חובה, ברירת מחדל: SMTP_USER) |
 
 ### 2. דרייב
@@ -40,9 +41,13 @@ Vercel ← הפרויקט ← Settings ← Environment Variables. אחרי הו�
 7. ב-Vercel: `DRIVE_BRIDGE_URL` = הכתובת, `DRIVE_BRIDGE_SECRET` = אותה מחרוזת מסעיף 4.
 
 ### 3. סיכום אוטומטי
+ברירת המחדל: סיכום חינמי, שנבנה מהציונים ומהתשובות (`api/_lib/questionnaireRuleSummary.ts`). לא צריך שום הגדרה.
+
+לסיכום חכם של Claude (בתשלום לפי שימוש):
 | משתנה | ערך |
 |---|---|
-| `ANTHROPIC_API_KEY` | מפתח API של Anthropic (כבר משמש את מחולל המסרים, אם הוגדר) |
+| `QUESTIONNAIRE_AI_SUMMARY` | `1` כדי להפעיל |
+| `ANTHROPIC_API_KEY` | מפתח API של Anthropic עם קרדיט |
 | `QUESTIONNAIRE_AI_MODEL` | לא חובה. ברירת מחדל: `claude-opus-5-5` |
 | `AI_DAILY_LIMIT` | לא חובה. מכסה יומית משותפת לכל הפעלות הבינה המלאכותית (ברירת מחדל 30) |
 
