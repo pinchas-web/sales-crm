@@ -27,17 +27,18 @@ admin.storage = {
   ...db.storage,
   getBucket: async () => ({ data: { name: 'contracts' }, error: null }),
   createBucket: async () => ({ data: {}, error: null }),
-  from: (bucket: string) => bucket !== 'contracts' ? db.storage.from(bucket) : ({
-    upload: async (path: string, body: Buffer) => { memFiles.set(path, { body: Buffer.from(body), type: '' }); return { data: { path }, error: null }; },
+  from: (bucket: string) => !['contracts', 'questionnaires'].includes(bucket) ? db.storage.from(bucket) : ({
+    upload: async (path: string, body: Buffer) => { memFiles.set(`${bucket}/${path}`, { body: Buffer.from(body), type: '' }); return { data: { path }, error: null }; },
+    remove: async (paths: string[]) => { paths.forEach(p => memFiles.delete(`${bucket}/${p}`)); return { data: [], error: null }; },
     download: async (path: string) => {
-      const f = memFiles.get(path);
+      const f = memFiles.get(`${bucket}/${path}`);
       return f ? { data: new Blob([new Uint8Array(f.body)]), error: null } : { data: null, error: { message: 'not found' } };
     },
     list: async (folder: string) => ({
-      data: [...memFiles.keys()].filter(k => k.startsWith(`${folder}/`)).map(k => ({ name: k.slice(folder.length + 1) })),
+      data: [...memFiles.keys()].filter(k => k.startsWith(`${bucket}/${folder}/`)).map(k => ({ name: k.slice(bucket.length + folder.length + 2) })),
       error: null,
     }),
-    createSignedUrl: async (path: string) => ({ data: { signedUrl: `http://localhost:3001/__file/${encodeURIComponent(path)}` }, error: null }),
+    createSignedUrl: async (path: string) => ({ data: { signedUrl: `http://localhost:3001/__file/${encodeURIComponent(`${bucket}/${path}`)}` }, error: null }),
   }),
 };
 admin.auth.getUser = async (token: string) => ({
@@ -52,6 +53,7 @@ const routes: Record<string, string> = {
   '/api/storage/upload-url': '../api/storage/upload-url',
   '/api/contracts': '../api/contracts/index',
   '/api/contracts/public': '../api/contracts/public',
+  '/api/questionnaires': '../api/questionnaires',
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -125,6 +127,7 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const vres = {
     status(code: number) { res.statusCode = code; return vres; },
     json(body: unknown) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); return vres; },
+    setHeader(k: string, v: string) { res.setHeader(k, v); return vres; },
   };
   await handler(vreq, vres);
 }).listen(3001, () => console.log('demo API on http://localhost:3001'));

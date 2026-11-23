@@ -45,6 +45,8 @@ export interface Permissions {
   seeAllMoney: boolean;
   /** יוצר משתמשים, משנה סיסמאות ותפקידים, ועורך את העיצוב */
   manageUsers: boolean;
+  /** שולח שאלונים ללקוחות ורואה את התשובות (כולל אבחון מנטלי — מידע אישי רגיש) */
+  questionnaires: boolean;
   /** מפתחות קונפיגורציה שמותר לשמור */
   configKeys: ConfigKey[];
 }
@@ -63,21 +65,21 @@ export const PERMISSIONS: Record<Role, Permissions> = {
     tabs: ALL_TABS,
     allRecords: true, deleteLeads: true,
     viewCourses: true, editCourses: true, marketing: true, editProducts: true,
-    seeAllMoney: true, manageUsers: true,
+    seeAllMoney: true, manageUsers: true, questionnaires: true,
     configKeys: ['users', ...OFFICE_CONFIG],
   },
   office_manager: {
     tabs: ALL_TABS,
     allRecords: true, deleteLeads: true,
     viewCourses: true, editCourses: false, marketing: true, editProducts: true,
-    seeAllMoney: true, manageUsers: false,
+    seeAllMoney: true, manageUsers: false, questionnaires: true,
     configKeys: OFFICE_CONFIG,
   },
   secretary: {
     tabs: ['home', 'leads', 'tasks', 'chat', 'products', 'clients'],
     allRecords: true, deleteLeads: false,
     viewCourses: false, editCourses: false, marketing: false, editProducts: false,
-    seeAllMoney: false, manageUsers: false,
+    seeAllMoney: false, manageUsers: false, questionnaires: false,
     configKeys: [],
   },
   salesperson: {
@@ -85,7 +87,7 @@ export const PERMISSIONS: Record<Role, Permissions> = {
     tabs: ['home', 'leads', 'tasks', 'chat', 'products'],
     allRecords: false, deleteLeads: false,
     viewCourses: false, editCourses: false, marketing: false, editProducts: false,
-    seeAllMoney: false, manageUsers: false,
+    seeAllMoney: false, manageUsers: false, questionnaires: false,
     configKeys: [],
   },
 };

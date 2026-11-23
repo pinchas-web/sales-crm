@@ -17,6 +17,7 @@ import {
 import { Btn, Input, SelectInput, Modal, ScoreBadge, ConfirmDialog, Textarea, EmptyState } from '../ui';
 import { permsOf } from '../permissions';
 import ProductInfoModal from './ProductInfoModal';
+import QuestionnairePanel from '../questionnaires/QuestionnairePanel';
 import type { Product } from '../types';
 
 // ─── Activity type selector ───────────────────────────────────────────────────
@@ -112,7 +113,7 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
   const [taskTime,      setTaskTime     ] = useState('');
   const [taskAssignee,  setTaskAssignee ] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [tab,           setTab         ] = useState<'info' | 'activity' | 'tasks'>('info');
+  const [tab,           setTab         ] = useState<'info' | 'activity' | 'tasks' | 'questionnaires'>('info');
   const [infoProduct,   setInfoProduct ] = useState<Product | null>(null);
 
   useEffect(() => {
@@ -152,7 +153,13 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
     setTaskNote(''); setTaskDate(TODAY); setTaskTime('');
   }
 
-  const TABS = [{ id: 'info', label: 'פרטים' }, { id: 'activity', label: `פעילות (${activities.length})` }, { id: 'tasks', label: `משימות (${tasks.length})` }] as const;
+  const canQ = !!permsOf(state)?.questionnaires;
+  const TABS: { id: typeof tab; label: string }[] = [
+    { id: 'info', label: 'פרטים' },
+    { id: 'activity', label: `פעילות (${activities.length})` },
+    { id: 'tasks', label: `משימות (${tasks.length})` },
+    ...(canQ ? [{ id: 'questionnaires' as const, label: 'שאלונים' }] : []),
+  ];
 
   return (
     <div className="fixed inset-0 z-40 flex" dir="rtl">
@@ -188,6 +195,10 @@ function LeadDetailDrawer({ lead, state, onClose, onUpdateLead, onAddActivity, o
         </div>
 
         <div className="p-5 flex-1 space-y-5">
+          {tab === 'questionnaires' && canQ && (
+            <QuestionnairePanel lead={lead} clientId={state.clients.find(c => c.leadId === lead.id)?.id} canDelete={!!permsOf(state)?.manageUsers} />
+          )}
+
           {/* Info tab */}
           {tab === 'info' && (
             <section>

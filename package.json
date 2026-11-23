@@ -17,6 +17,7 @@
     "@anthropic-ai/sdk": "^0.95.2",
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.99.1",
+    "@vercel/functions": "^2.2.13",
     "chart.js": "^4.5.1",
     "jspdf": "^3.0.1",
     "jszip": "^3.10.1",

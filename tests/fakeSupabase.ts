@@ -23,8 +23,23 @@ export class FakeDb {
     return new Query(this, table);
   }
 
+  /** קבצים בזיכרון (דליים פרטיים: הסכמים, שאלונים) */
+  files = new Map<string, Buffer>();
   storage = {
+    getBucket: async (name: string) => ({ data: { name }, error: null }),
+    createBucket: async () => ({ data: {}, error: null }),
     from: (bucket: string) => ({
+      upload: async (path: string, body: Buffer | string) => { this.files.set(`${bucket}/${path}`, Buffer.from(body)); return { data: { path }, error: null }; },
+      download: async (path: string) => {
+        const f = this.files.get(`${bucket}/${path}`);
+        return f ? { data: new Blob([new Uint8Array(f)]), error: null } : { data: null, error: { message: 'not found' } };
+      },
+      list: async (folder: string) => ({
+        data: [...this.files.keys()].filter(k => k.startsWith(`${bucket}/${folder}/`)).map(k => ({ name: k.slice(bucket.length + folder.length + 2) })),
+        error: null,
+      }),
+      remove: async (paths: string[]) => { paths.forEach(p => this.files.delete(`${bucket}/${p}`)); return { data: [], error: null }; },
+      createSignedUrl: async (path: string) => ({ data: { signedUrl: `https://fake/signed/${bucket}/${path}` }, error: null }),
       createSignedUploadUrl: async (path: string) => {
         this.uploads.push(`${bucket}/${path}`);
         return { data: { signedUrl: `https://fake/${path}`, token: 'tok', path }, error: null };
