@@ -31,6 +31,8 @@ export interface QRecord {
   /** תוקף הקישור האישי */
   expiresAt?: string;
   viewedAt?: string;
+  /** מתי הקישור נשלח ללקוח במייל מה-CRM */
+  emailedAt?: string;
   submittedAt?: string;
   answers?: Answers;
   scores?: SectionScore[];

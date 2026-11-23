@@ -9,6 +9,7 @@ import { Btn } from '../ui';
 import {
   apiListLeadQuestionnaires, apiCreateQuestionnaire, apiCancelQuestionnaire, apiRetryQuestionnaire,
   apiAttachQuestionnairePdf, apiDeleteQuestionnaire, apiQuestionnairePdfUrl, apiQuestionnaireConfig,
+  apiSendQuestionnaireLinks,
 } from '../api';
 import {
   QUESTIONNAIRES, LEVEL_LABELS, answerText, visibleQuestions, type QuestionnaireId,
@@ -38,6 +39,12 @@ function inviteText(qid: QuestionnaireId, name: string, link: string) {
   return qid === 'mental'
     ? `היי ${first}, לפני שאנחנו מתחילים הכנתי לך אבחון אישי. כדאי למלא אותו בשקט, בלי הפרעות, ולענות בכנות ובפירוט. זה הקישור: ${link}`
     : `היי ${first}, לקראת פגישת האסטרטגיה שלנו הכנתי לך שאלון קצר. כך נוכל לנצל את הפגישה עד הסוף: ${link}`;
+}
+
+function inviteTextMany(name: string, items: { qid: QuestionnaireId; link: string }[]) {
+  const first = name.split(' ')[0] || '';
+  const lines = items.map((it, i) => `${i + 1}. ${QUESTIONNAIRES[it.qid].shortTitle} (${QUESTIONNAIRES[it.qid].minutes}): ${it.link}`);
+  return `היי ${first}, לקראת המפגש שלנו הכנתי לך ${items.length === 2 ? 'שני שאלונים' : `${items.length} שאלונים`}. אפשר למלא כל אחד בזמן אחר, והתשובות נשמרות גם אם עוצרים באמצע:\n\n${lines.join('\n')}`;
 }
 
 function StatusChip({ r }: { r: QRecord }) {
@@ -243,6 +250,9 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
   const [creating, setCreating] = useState<QuestionnaireId | null>(null);
   const [copied, setCopied] = useState('');
   const [config, setConfig] = useState<{ mail: boolean; drive: boolean; ai: boolean } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState('');
+  const [sentNote, setSentNote] = useState('');
 
   const [reload, setReload] = useState(0);
   const load = () => setReload(n => n + 1);
@@ -278,6 +288,24 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
       setList(l => (l ?? []).map(x => (x.token === token ? r : x)));
     } catch (e) { setError((e as Error).message); }
   }
+  /** שליחה במייל מהשרת — שאלון אחד או כמה יחד, באותו מייל */
+  async function sendEmail(tokens: string[], key: string) {
+    let to: string | undefined;
+    if (!lead.email) {
+      const v = window.prompt('אין מייל בתיק. לאיזו כתובת לשלוח?')?.trim();
+      if (!v) return;
+      to = v;
+    }
+    setSending(key); setError(''); setSentNote('');
+    try {
+      const r = await apiSendQuestionnaireLinks({ leadId: lead.id, tokens, to });
+      const byToken = new Map(r.items.map(x => [x.token, x]));
+      setList(l => (l ?? []).map(x => byToken.get(x.token) ?? x));
+      setSentNote(`נשלח מייל ל-${r.to} עם ${tokens.length === 1 ? 'השאלון' : `${tokens.length} שאלונים`}.`);
+      setPicked(new Set());
+    } catch (e) { setError((e as Error).message); }
+    setSending('');
+  }
   function copy(text: string, key: string) {
     navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(''), 2000); });
   }
@@ -308,12 +336,11 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
         })}
       </div>
 
-      {config && (!config.mail || !config.drive || !config.ai) && (
+      {config && (!config.mail || !config.drive) && (
         <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
           התשובות נשמרות כאן בכל מקרה.
           {!config.mail && ' שליחה למייל עוד לא מחוברת.'}
           {!config.drive && ' שמירה בדרייב עוד לא מחוברת.'}
-          {!config.ai && ' סיכום אוטומטי עוד לא מחובר.'}
           {' '}ההוראות לחיבור: docs/questionnaires/README.md
         </p>
       )}
@@ -326,6 +353,33 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
         </div>
       )}
 
+      {sentNote && <div className="bg-green-50 text-green-800 text-sm rounded-lg p-2.5">{sentNote}</div>}
+
+      {(() => {
+        const open = (list ?? []).filter(r => r.status === 'sent' && !(r.expiresAt && r.expiresAt < new Date().toISOString()));
+        if (open.length < 2) return null;
+        const chosen = open.filter(r => picked.has(r.token));
+        const items = chosen.map(r => ({ qid: r.qid, link: qLink(r.token) }));
+        return (
+          <div className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/60 p-3">
+            <p className="text-sm font-semibold text-gray-800">שליחת כמה שאלונים יחד</p>
+            <p className="text-xs text-gray-500 mb-2">סמנו את השאלונים למטה, והם יישלחו ללקוח בהודעה אחת.</p>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Btn size="sm" variant="secondary" onClick={() => setPicked(chosen.length === open.length ? new Set() : new Set(open.map(r => r.token)))}>
+                {chosen.length === open.length ? 'ביטול הסימון' : `סימון הכל (${open.length})`}
+              </Btn>
+              <Btn size="sm" disabled={chosen.length < 1 || !!sending} onClick={() => sendEmail(chosen.map(r => r.token), 'bulk')}>
+                {sending === 'bulk' ? 'שולח…' : `שליחה במייל אחד${chosen.length ? ` (${chosen.length})` : ''}`}
+              </Btn>
+              {chosen.length > 0 && (
+                <a href={waLink(lead.phone, inviteTextMany(lead.name, items))} target="_blank" rel="noreferrer"
+                  className="text-sm px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700">{`וואטסאפ אחד (${chosen.length})`}</a>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {(list ?? []).map(r => {
         const def = QUESTIONNAIRES[r.qid];
         const link = qLink(r.token);
@@ -334,12 +388,20 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
         return (
           <div key={r.token} className={`rounded-xl border p-3.5 ${r.status === 'cancelled' ? 'opacity-50' : 'bg-white'}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
+              <div className="flex items-start gap-2">
+                {active && (list ?? []).filter(x => x.status === 'sent' && !(x.expiresAt && x.expiresAt < new Date().toISOString())).length > 1 && (
+                  <input type="checkbox" className="mt-1 w-4 h-4 accent-red-700" aria-label={`לסמן את ${def.shortTitle}`}
+                    checked={picked.has(r.token)}
+                    onChange={e => setPicked(p => { const n = new Set(p); if (e.target.checked) n.add(r.token); else n.delete(r.token); return n; })} />
+                )}
+                <div>
                 <p className="font-semibold text-gray-800">{def.shortTitle}</p>
                 <p className="text-xs text-gray-400">
                   {r.source === 'general' ? 'מולא דרך הקישור הכללי' : `נוצר ${heDate(r.createdAt)}`}
                   {active && r.expiresAt ? ` · בתוקף עד ${heDate(r.expiresAt)}` : ''}
+                  {r.emailedAt ? ` · נשלח במייל ${heDate(r.emailedAt)}` : ''}
                 </p>
+                </div>
               </div>
               <StatusChip r={r} />
             </div>
@@ -357,10 +419,9 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
               <div className="flex flex-wrap gap-2 mt-3">
                 <Btn size="sm" onClick={() => copy(link, r.token)}>{copied === r.token ? 'הקישור הועתק ✓' : 'העתקת קישור'}</Btn>
                 <a href={waLink(lead.phone, msg)} target="_blank" rel="noreferrer" className="text-sm px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700">שליחה בוואטסאפ</a>
-                {lead.email && (
-                  <a href={`mailto:${lead.email}?subject=${encodeURIComponent(def.title)}&body=${encodeURIComponent(msg)}`}
-                    className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">שליחה במייל</a>
-                )}
+                <Btn size="sm" variant="secondary" disabled={!!sending} onClick={() => sendEmail([r.token], r.token)}>
+                  {sending === r.token ? 'שולח…' : r.emailedAt ? 'שליחה חוזרת במייל' : 'שליחה במייל'}
+                </Btn>
                 <a href={link} target="_blank" rel="noreferrer" className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">איך זה נראה</a>
                 <Btn size="sm" variant="danger" onClick={() => cancel(r.token)}>ביטול</Btn>
               </div>
