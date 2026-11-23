@@ -1,6 +1,6 @@
 /**
  * מה שקורה אחרי שהלקוח שולח שאלון:
- *   1. סיכום כתוב לפנחס (Claude) — אם יש מפתח API ולא נגמרה המכסה היומית
+ *   1. סיכום כתוב לפנחס — חינמי, לפי הציונים והתשובות. אם מחובר מפתח של Claude, סיכום חכם במקומו
  *   2. מייל לפנחס עם ה-PDF, הציונים והסיכום. ללקוח — רק מייל תודה, בלי התשובות.
  *   3. עותק PDF לדרייב, בתיקייה של הלקוח
  * כל שלב עצמאי: אם אחד נכשל, האחרים ממשיכים, והסטטוס נשמר ברשומה (אפשר לנסות שוב מה-CRM).
@@ -13,6 +13,7 @@ import { getQ, saveQ, loadPdf, pdfFileName } from './questionnaireStore';
 import { sendMail, notifyEmail, mailConfigured } from './mailer';
 import { uploadToDrive, driveConfigured } from './drive';
 import { consumeAiQuota } from './aiUsage';
+import { buildRuleSummary, RULES_MODEL } from './questionnaireRuleSummary';
 
 export const AI_MODEL = process.env.QUESTIONNAIRE_AI_MODEL || 'claude-opus-5-5';
 
@@ -198,19 +199,25 @@ export async function finalizeQ(token: string, opts: { baseUrl?: string; force?:
 
   // 1. סיכום
   if (force.has('summary') || !rec.summary?.text) {
-    if (!process.env.ANTHROPIC_API_KEY) rec.summaryStatus = 'not_configured';
+    // סיכום חינמי לפי כללים — תמיד זמין. אם מחובר מפתח של Claude, מנסים קודם סיכום חכם.
+    const ruleSummary = () => {
+      const text = buildRuleSummary(rec!);
+      if (text) { rec!.summary = { text, model: RULES_MODEL, createdAt: new Date().toISOString() }; rec!.summaryStatus = 'sent'; }
+      else rec!.summaryStatus = 'skipped';
+    };
+    if (!process.env.ANTHROPIC_API_KEY) ruleSummary();
     else {
       try {
         const quota = await consumeAiQuota();
-        if (!quota.ok) { rec.summaryStatus = 'failed'; errors.push('מכסת הבינה המלאכותית היומית נוצלה'); }
+        if (!quota.ok) { ruleSummary(); errors.push('מכסת הבינה המלאכותית היומית נוצלה, נכתב סיכום לפי הציונים'); }
         else {
           const s = await generateSummary(rec);
           rec.summary = { text: s.text, model: s.model, createdAt: new Date().toISOString() };
           rec.summaryStatus = 'sent';
         }
       } catch (err) {
-        rec.summaryStatus = 'failed';
-        errors.push(`סיכום: ${err instanceof Error ? err.message.slice(0, 200) : 'שגיאה'}`);
+        ruleSummary();
+        errors.push(`סיכום חכם: ${err instanceof Error ? err.message.slice(0, 200) : 'שגיאה'}`);
         console.error('[questionnaires] summary failed:', err instanceof Error ? err.message : err);
       }
     }

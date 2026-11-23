@@ -184,3 +184,27 @@ describe('קישור כללי', () => {
     expect((await call('POST', { body: { ...strategy('0547776666'), elapsedMs: 3000 } })).statusCode).toBe(400);
   });
 });
+
+describe('סיכום חינמי (בלי בינה מלאכותית)', () => {
+  it('אבחון מנטלי: שורה אחת, חוזקות, חסמים ו-3 שאלות, לפי הציונים', async () => {
+    const { buildRuleSummary } = await import('../api/_lib/questionnaireRuleSummary');
+    const a: Any = fullMental();
+    a.g1 = 7; a.g2 = 7; a.g3 = 7; a.g4 = 7; a.f1 = 7; a.f2 = 7; a.f3 = 7; a.big_goal = 'לפתוח קליניקה מלאה';
+    const scores = scoreAnswers(QUESTIONNAIRES.mental, a);
+    const text = buildRuleSummary({ qid: 'mental', answers: a, scores, overall: overallScore(scores) } as Any);
+    expect(text).toContain('## בשורה אחת');
+    expect(text).toContain('הצבת מטרות (100)');
+    expect(text).toContain('ריכוז ומיקוד: 0 מתוך 100');
+    expect(text).toContain('לפתוח קליניקה מלאה');
+    expect(text.split('## 3 שאלות לשאול בפגישה')[1].trim().split('\n')).toHaveLength(3);
+  });
+  it('אסטרטגיה: מחשב כמה פגישות צריך כדי להגיע ליעד', async () => {
+    const { buildRuleSummary, parseAmount } = await import('../api/_lib/questionnaireRuleSummary');
+    expect(parseAmount('40 אלף')).toBe(40000);
+    expect(parseAmount('40,000 ₪')).toBe(40000);
+    const text = buildRuleSummary({ qid: 'strategy', answers: { session_price: '400 ₪', target_income: '40,000', strengths: 'הקשבה\nסבלנות' } } as Any);
+    expect(text).toContain('כ-100 פגישות בחודש');
+    expect(text).toContain('- הקשבה');
+    expect(text).toContain('אין בידול מוגדר');
+  });
+});
