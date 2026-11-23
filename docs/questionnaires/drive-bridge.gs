@@ -50,8 +50,17 @@ function reply(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/** להרצה ידנית פעם אחת מהעורך: יוצר את התיקייה ומאשר הרשאות */
+/**
+ * להרצה ידנית פעם אחת מהעורך: יוצר את התיקייה, מאשר הרשאות,
+ * ויוצר סיסמה משותפת אקראית (SECRET) אם עוד אין. את הסיסמה מעתיקים ל-Vercel.
+ */
 function setup() {
-  getRoot();
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('SECRET');
+  if (!secret || secret.length < 24) {
+    secret = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    props.setProperty('SECRET', secret);
+  }
   Logger.log('מוכן. התיקייה: ' + getRoot().getUrl());
+  Logger.log('הסיסמה להעתקה ל-Vercel (DRIVE_BRIDGE_SECRET): ' + secret);
 }
