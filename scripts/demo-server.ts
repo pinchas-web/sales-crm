@@ -21,7 +21,25 @@ const { supabaseAdmin } = await import('../api/_lib/supabaseAdmin');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const admin = supabaseAdmin as any;
 admin.from = (t: string) => db.from(t);
-admin.storage = db.storage;
+// דלי הסכמים בזיכרון (להדגמת חתימה מרחוק)
+const memFiles = new Map<string, { body: Buffer; type: string }>();
+admin.storage = {
+  ...db.storage,
+  getBucket: async () => ({ data: { name: 'contracts' }, error: null }),
+  createBucket: async () => ({ data: {}, error: null }),
+  from: (bucket: string) => bucket !== 'contracts' ? db.storage.from(bucket) : ({
+    upload: async (path: string, body: Buffer) => { memFiles.set(path, { body: Buffer.from(body), type: '' }); return { data: { path }, error: null }; },
+    download: async (path: string) => {
+      const f = memFiles.get(path);
+      return f ? { data: new Blob([new Uint8Array(f.body)]), error: null } : { data: null, error: { message: 'not found' } };
+    },
+    list: async (folder: string) => ({
+      data: [...memFiles.keys()].filter(k => k.startsWith(`${folder}/`)).map(k => ({ name: k.slice(folder.length + 1) })),
+      error: null,
+    }),
+    createSignedUrl: async (path: string) => ({ data: { signedUrl: `http://localhost:3001/__file/${encodeURIComponent(path)}` }, error: null }),
+  }),
+};
 admin.auth.getUser = async (token: string) => ({
   data: { user: token.startsWith('auth-') ? { id: token, email: `${token}@demo`, email_confirmed_at: '2026-01-01' } : null },
   error: token.startsWith('auth-') ? null : { message: 'bad token' },
@@ -32,6 +50,8 @@ const routes: Record<string, string> = {
   '/api/auth/me': '../api/auth/me',
   '/api/marketing-generate': '../api/marketing-generate',
   '/api/storage/upload-url': '../api/storage/upload-url',
+  '/api/contracts': '../api/contracts/index',
+  '/api/contracts/public': '../api/contracts/public',
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -58,7 +78,7 @@ db.reset({
       { id: 'talk', label: 'בשיחה',       color: '#fef3c7', textColor: '#92400e', order: 1 },
       { id: 'won',  label: 'נסגר ✓',      color: '#dcfce7', textColor: '#166534', order: 2, isFinal: true, isWon: true },
     ],
-    products: [{ id: 'p1', name: 'ביזנסתרפיה', shortDescription: 'תוכנית הדגל', description: 'תיאור לדוגמה של התוכנית:\nלמי היא מתאימה, מה מקבלים, ואיך היא בנויה.', syllabusText: 'מודול 1 — נושא לדוגמה\nמודול 2 — נושא לדוגמה\nמודול 3 — נושא לדוגמה', price: 5700, category: 'תוכנית', active: true, testimonials: [{ id: 'tm1', name: 'ממליצה לדוגמה', phone: '050-0000009', note: 'ציטוט לדוגמה' }], onboardingSteps: [{ id: 's1', title: 'חתימה על חוזה', order: 0 }, { id: 's2', title: 'תשלום ראשון', order: 1 }] }],
+    products: [{ id: 'p1', name: 'ביזנסתרפיה', shortDescription: 'תוכנית הדגל', description: 'תיאור לדוגמה של התוכנית:\nלמי היא מתאימה, מה מקבלים, ואיך היא בנויה.', syllabusText: 'מודול 1 — נושא לדוגמה\nמודול 2 — נושא לדוגמה\nמודול 3 — נושא לדוגמה', price: 5700, category: 'תוכנית', active: true, contractTemplateId: 'premium-2026', testimonials: [{ id: 'tm1', name: 'ממליצה לדוגמה', phone: '050-0000009', note: 'ציטוט לדוגמה' }], onboardingSteps: [{ id: 's1', title: 'חתימה על חוזה', order: 0 }, { id: 's2', title: 'תשלום ראשון', order: 1 }] }],
     dropdown_options: { sources: ['אתר', 'פייסבוק'], professions: ['מטפל/ת'], audience_types: ['כללי'], programs: ['ביזנסתרפיה'] },
     custom_fields: [], labels: {},
     nav_config: ['home', 'leads', 'clients', 'products', 'tasks', 'data', 'chat', 'courses', 'marketing', 'settings']
@@ -94,6 +114,10 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 
 createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const path = (req.url ?? '').split('?')[0];
+  if (path.startsWith('/__file/')) {
+    const f = memFiles.get(decodeURIComponent(path.slice(8)));
+    res.setHeader('Content-Type', 'application/pdf'); res.end(f?.body ?? ''); return;
+  }
   const mod = routes[path];
   if (!mod) { res.statusCode = 404; res.end('{}'); return; }
   const { default: handler } = await import(mod);

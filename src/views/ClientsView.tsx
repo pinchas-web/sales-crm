@@ -3,10 +3,12 @@
  * טבלת התקדמות עם שלבי קליטה לפי המוצר שנרכש.
  * לחיצה על שורה → כרטיס לקוח מלא עם 3 לשוניות: התקדמות, פרטים, הערות.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AppState, Client, Lead, Product, OnboardingStep } from '../types';
 import { uid, formatDate } from '../utils';
 import { Btn, Input, Modal, Textarea } from '../ui';
+import ContractPanel from '../contracts/ContractPanel';
+import { apiListContractSummaries, type ContractSummary } from '../api';
 
 // ─── Client Detail Modal ───────────────────────────────────────────────────────
 
@@ -17,7 +19,7 @@ function ClientDetailModal({ client, lead, product, state, onClose, onSave }: {
 }) {
   const [form, setForm] = useState<Client>(client);
   const [newStepTitle, setNewStepTitle] = useState('');
-  const [tab, setTab] = useState<'progress' | 'info' | 'notes'>('progress');
+  const [tab, setTab] = useState<'progress' | 'contract' | 'info' | 'notes'>('progress');
 
   // Merge product steps + custom steps, sorted by order
   const productSteps: OnboardingStep[] = product
@@ -65,6 +67,7 @@ function ClientDetailModal({ client, lead, product, state, onClose, onSave }: {
   const assignee = state.users.find(u => u.id === form.assignedTo);
   const TABS = [
     { id: 'progress', label: 'שלבי קליטה' },
+    { id: 'contract', label: 'הסכם'       },
     { id: 'info',     label: 'פרטים'      },
     { id: 'notes',    label: 'הערות'      },
   ] as const;
@@ -164,6 +167,9 @@ function ClientDetailModal({ client, lead, product, state, onClose, onSave }: {
         </div>
       )}
 
+      {/* ── Contract Tab ── */}
+      {tab === 'contract' && <ContractPanel client={client} lead={lead} />}
+
       {/* ── Info Tab ── */}
       {tab === 'info' && (
         <div className="space-y-3 text-sm">
@@ -243,6 +249,18 @@ export default function ClientsView({
   onSaveClient: (c: Client) => void;
 }) {
   const [selected, setSelected] = useState<Client | null>(null);
+  const [contracts, setContracts] = useState<ContractSummary[]>([]);
+  useEffect(() => {
+    apiListContractSummaries().then(setContracts).catch(() => setContracts([]));
+  }, [selected]);
+
+  function contractChip(clientId: string) {
+    const mine = contracts.filter(c => c.clientId === clientId && c.status !== 'cancelled');
+    if (mine.some(c => c.status === 'signed')) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">נחתם ✓</span>;
+    if (mine.some(c => c.viewedAt)) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">נפתח</span>;
+    if (mine.length) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">נשלח</span>;
+    return <span className="text-xs text-gray-300">—</span>;
+  }
 
   function getProduct(productId: string): Product | undefined {
     return state.products.find(p => p.id === productId);
@@ -290,6 +308,7 @@ export default function ClientsView({
                 <th className="px-4 py-3 font-semibold text-gray-600">טלפון</th>
                 <th className="px-4 py-3 font-semibold text-gray-600">מוצר</th>
                 <th className="px-4 py-3 font-semibold text-gray-600">ערך עסקה</th>
+                <th className="px-4 py-3 font-semibold text-gray-600">הסכם</th>
                 <th className="px-4 py-3 font-semibold text-gray-600">אחראי קליטה</th>
                 <th className="px-4 py-3 font-semibold text-gray-600">תאריך סגירה</th>
                 {/* Dynamic step columns */}
@@ -330,6 +349,7 @@ export default function ClientsView({
                     <td className="px-4 py-3 font-semibold text-gray-800">
                       ₪{client.dealValue.toLocaleString('he-IL')}
                     </td>
+                    <td className="px-4 py-3">{contractChip(client.id)}</td>
                     <td className="px-4 py-3 text-gray-600">{assignee?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(client.closedAt)}</td>
                     {/* Step checkboxes */}

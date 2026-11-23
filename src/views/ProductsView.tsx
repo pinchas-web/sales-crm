@@ -3,10 +3,12 @@
  * נהלי הקליטה שמוגדרים כאן מופיעים אוטומטית בכרטיס הלקוח אחרי סגירה.
  */
 import { useState } from 'react';
-import type { AppState, Product, ProductTestimonial, OnboardingStep } from '../types';
+import type { AppState, Product, ProductTestimonial, OnboardingStep, ProductDocument } from '../types';
 import { uid } from '../utils';
 import { Btn, Input, Modal, Textarea, EmptyState, Toggle, ConfirmDialog } from '../ui';
 import ProductInfoModal from './ProductInfoModal';
+import { apiUploadCourseFile } from '../api';
+import { CONTRACT_TEMPLATES } from '../../api/_lib/contractTypes';
 
 // ─── Product Card ─────────────────────────────────────────────────────────────
 
@@ -143,6 +145,70 @@ function TestimonialsEditor({ items, onChange }: {
   );
 }
 
+// ─── Documents Editor ─────────────────────────────────────────────────────────
+
+function DocumentsEditor({ product, onChange }: {
+  product: Product;
+  onChange: (patch: Partial<Product>) => void;
+}) {
+  const docs = product.documents ?? [];
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true); setErr('');
+    try {
+      const { fileKey, fileUrl } = await apiUploadCourseFile(file, `products/${product.id}`);
+      const doc: ProductDocument = {
+        id: uid(), title: title.trim() || file.name.replace(/\.[^.]+$/, ''),
+        fileUrl, fileKey, uploadedAt: new Date().toISOString(),
+      };
+      onChange({ documents: [...docs, doc] });
+      setTitle('');
+    } catch (ex) { setErr((ex as Error).message); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="field-label">קבצים שמורים</label>
+        {docs.length === 0 && <p className="text-sm text-gray-400 text-center py-3">אין עדיין קבצים למוצר הזה</p>}
+        <div className="space-y-2">
+          {docs.map(d => (
+            <div key={d.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5 border">
+              <span className="text-xs font-bold text-red-700 bg-red-50 rounded px-1.5 py-0.5">{(d.fileUrl.split('.').pop() ?? '').toUpperCase().slice(0, 4)}</span>
+              <a href={d.fileUrl} target="_blank" rel="noreferrer" className="flex-1 text-sm font-medium text-blue-700 hover:underline truncate">{d.title}</a>
+              <Btn size="xs" variant="danger" onClick={() => onChange({ documents: docs.filter(x => x.id !== d.id) })}>✕</Btn>
+            </div>
+          ))}
+        </div>
+        <div className="border border-dashed border-gray-300 rounded-lg p-3 space-y-2 bg-white mt-2">
+          <Input value={title} onChange={setTitle} placeholder="שם הקובץ (למשל: הסכם עבודה)" />
+          <label className={`inline-flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg cursor-pointer ${busy ? 'bg-gray-200 text-gray-500' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+            {busy ? 'מעלה…' : '+ העלאת קובץ'}
+            <input type="file" className="hidden" disabled={busy} onChange={upload} accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png" />
+          </label>
+          {err && <p className="text-xs text-red-600">{err}</p>}
+        </div>
+      </div>
+      <div>
+        <label className="field-label">הסכם דיגיטלי לחתימה מרחוק</label>
+        <select value={product.contractTemplateId ?? ''} onChange={e => onChange({ contractTemplateId: e.target.value || undefined })}
+          className="border border-gray-300 rounded-xl px-3 py-2 text-sm w-full bg-white">
+          <option value="">ללא</option>
+          {CONTRACT_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+        <p className="text-xs text-gray-500 mt-1">כשמחובר הסכם, בכרטיס כל לקוח של המוצר יש לשונית "הסכם": מתאימים אישית ושולחים קישור לחתימה.</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Product Detail Modal ─────────────────────────────────────────────────────
 
 function ProductDetailModal({ product, onClose, onSave, onDelete }: {
@@ -156,12 +222,13 @@ function ProductDetailModal({ product, onClose, onSave, onDelete }: {
     createdAt: new Date().toISOString(),
   });
   const [form, setForm]           = useState<Product>(product ?? blank());
-  const [tab, setTab]             = useState<'details' | 'syllabus' | 'steps' | 'testimonials'>('details');
+  const [tab, setTab]             = useState<'details' | 'syllabus' | 'documents' | 'steps' | 'testimonials'>('details');
   const [confirmDelete, setDel]   = useState(false);
 
   const TABS = [
     { id: 'details',      label: 'פרטים'       },
     { id: 'syllabus',     label: 'סילבוס'      },
+    { id: 'documents',    label: 'מסמכים'      },
     { id: 'steps',        label: 'קליטה'       },
     { id: 'testimonials', label: 'ממליצים'     },
   ] as const;
@@ -224,6 +291,10 @@ function ProductDetailModal({ product, onClose, onSave, onDelete }: {
             <Textarea value={form.contractText ?? ''} onChange={v => setForm(f => ({ ...f, contractText: v }))} placeholder="טקסט החוזה לחתימה..." rows={6} />
           </div>
         </div>
+      )}
+
+      {tab === 'documents' && (
+        <DocumentsEditor product={form} onChange={patch => setForm(f => ({ ...f, ...patch }))} />
       )}
 
       {tab === 'steps' && (

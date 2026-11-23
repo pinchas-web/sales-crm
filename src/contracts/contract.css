@@ -1,0 +1,105 @@
+/* הסכם ליווי פרימיום — עיצוב המותג (בלנק, צבעים ופונטים של פנחס הורביץ) */
+@font-face { font-family: "HCTzar";   src: url("/contract/tzar-bold.otf");   font-weight: 700; font-display: block; }
+@font-face { font-family: "HCNeue";   src: url("/contract/neue-bold.otf");   font-weight: 700; font-display: block; }
+@font-face { font-family: "HCNeue";   src: url("/contract/neue-medium.otf"); font-weight: 500; font-display: block; }
+@font-face { font-family: "HCAlmoni"; src: url("/contract/regular.otf");     font-weight: 400; font-display: block; }
+
+.hc-doc {
+  --red: #C7263A; --gold: #D2AB62; --sand: #E5CB9B; --cream: #F1ECD3;
+  --ink: #231F20; --wine: #A8234A; --soft: #6b6466;
+  font-family: "HCAlmoni", sans-serif; color: var(--ink);
+  font-size: 11.6pt; line-height: 1.62; direction: rtl; text-align: right;
+  /* מדידה זהה בתצוגה ובצילום ל-PDF */
+  text-rendering: geometricPrecision; font-kerning: normal;
+}
+.hc-doc * { box-sizing: border-box; margin: 0; padding: 0; }
+.hc-doc b, .hc-doc .b { font-family: "HCNeue"; font-weight: 700; }
+.hc-blk { display: flow-root; }
+
+/* ── עמוד A4 ── */
+.hc-page { width: 210mm; height: 297mm; position: relative; overflow: hidden; background: #fff; }
+.hc-page.first { background: #fff url("/contract/blank.jpg") top center / 210mm 297mm no-repeat; }
+.hc-page .hc-content { position: absolute; left: 20mm; right: 20mm; top: 44mm; }
+.hc-page.first .hc-content { top: 98mm; }
+.hc-bh { position: absolute; top: 8mm; right: 20mm; font-size: 10pt; font-family: "HCNeue"; font-weight: 500; }
+.hc-page.first .hc-bh { right: auto; left: 20mm; }
+.hc-head { position: absolute; top: 0; left: 0; width: 100%; height: 34mm; }
+.hc-head svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hc-head img { position: absolute; top: 5mm; left: 16mm; height: 21mm; width: auto; }
+.hc-head .hc-tag { position: absolute; top: 15mm; right: 20mm; font-family: "HCTzar"; font-weight: 700; font-size: 13pt; letter-spacing: .5px; }
+.hc-foot { position: absolute; bottom: 0; left: 0; width: 100%; height: 16mm; display: flex; align-items: center; justify-content: space-between; padding: 0 20mm; font-size: 8.8pt; color: var(--soft); border-top: .6mm solid var(--cream); }
+.hc-foot .pg { font-family: "HCNeue"; font-weight: 700; color: var(--red); }
+
+/* ── תצוגה רציפה (טלפון) ── */
+.hc-flow { background: #fff; padding: 22px 18px 28px; }
+.hc-flow .hc-flow-head { display: flex; align-items: center; justify-content: space-between; background: var(--cream); margin: -22px -18px 22px; padding: 14px 18px; }
+.hc-flow .hc-flow-head img { height: 54px; }
+.hc-flow .hc-flow-head span { font-family: "HCNeue"; font-weight: 500; font-size: 10pt; }
+
+/* ── טיפוגרפיה ── */
+.hc-title { font-family: "HCTzar"; font-weight: 700; font-size: 30pt; line-height: 1.05; margin-bottom: 2mm; }
+.hc-title span { color: var(--red); }
+.hc-sub { font-family: "HCNeue"; font-weight: 500; font-size: 12.5pt; color: var(--wine); margin-bottom: 2mm; display: flex; align-items: center; gap: 3mm; }
+.hc-sub::before { content: ""; width: 12mm; height: 1.2mm; border-radius: 1mm; background: var(--gold); flex: none; }
+.hc-for { font-size: 10pt; color: var(--soft); margin-bottom: 6mm; }
+.hc-for b { color: var(--ink); }
+.hc-p { margin-bottom: 3mm; }
+
+.hc-h2 { font-family: "HCTzar"; font-weight: 700; font-size: 17pt; line-height: 1.1; margin: 6mm 0 4mm; display: flex; align-items: center; gap: 3.5mm; }
+.hc-h2.big { font-size: 20pt; margin-top: 0; }
+.hc-h2 .n { flex: none; width: 9mm; height: 9mm; border-radius: 50%; background: var(--red); color: #fff; font-family: "HCNeue"; font-size: 12pt; display: flex; align-items: center; justify-content: center; padding-top: .6mm; }
+
+.hc-goal { background: var(--cream); border-radius: 5mm; padding: 5mm 7mm; margin: 2mm 0 4mm; position: relative; overflow: hidden; }
+.hc-goal::after { content: ""; position: absolute; left: -10mm; bottom: -14mm; width: 34mm; height: 30mm; border-radius: 50% 60% 40% 55%; background: var(--sand); opacity: .55; }
+.hc-goal .k { font-family: "HCNeue"; font-weight: 700; color: var(--red); font-size: 10pt; margin-bottom: 1mm; position: relative; z-index: 1; }
+.hc-goal .v { font-family: "HCNeue"; font-weight: 700; font-size: 13.5pt; line-height: 1.4; position: relative; z-index: 1; }
+
+.hc-personal { border: .45mm solid var(--gold); border-radius: 5mm; padding: 4mm 6mm; margin: 1mm 0 4mm; background: #fffdf7; }
+.hc-personal .k { font-family: "HCNeue"; font-weight: 700; color: var(--wine); font-size: 10pt; margin-bottom: 1mm; }
+.hc-personal .v { font-size: 11.6pt; white-space: pre-wrap; }
+
+.hc-note { font-size: 10.5pt; color: var(--soft); border-right: 1mm solid var(--gold); padding: 1mm 4mm 1mm 0; margin: 2mm 0 3mm; }
+.hc-note b { color: var(--ink); }
+
+.hc-step { position: relative; padding-right: 13mm; margin-bottom: 3.4mm; }
+.hc-step .num { position: absolute; right: 0; top: .2mm; width: 8.5mm; height: 8.5mm; border-radius: 2.6mm; background: var(--cream); color: var(--red); font-family: "HCNeue"; font-weight: 700; font-size: 11pt; display: flex; align-items: center; justify-content: center; padding-top: .5mm; }
+.hc-chips { display: flex; flex-wrap: wrap; gap: 2mm; margin-top: 2mm; }
+.hc-chips span { background: #fff; border: .35mm solid var(--sand); border-radius: 20mm; padding: .6mm 3.6mm; font-size: 10pt; }
+
+.hc-bonus { display: flex; gap: 4mm; align-items: flex-start; border: .35mm solid var(--sand); border-radius: 4mm; padding: 3.6mm 5mm; margin-bottom: 3mm; background: #fff; }
+.hc-bonus .bn { flex: none; width: 11mm; height: 11mm; border-radius: 50%; background: var(--gold); color: #fff; font-family: "HCNeue"; font-weight: 700; font-size: 13pt; display: flex; align-items: center; justify-content: center; padding-top: .6mm; }
+.hc-bonus .t { font-family: "HCNeue"; font-weight: 700; display: block; font-size: 12pt; margin-bottom: .5mm; }
+.hc-bonus .x { font-size: 10.3pt; color: var(--wine); margin-top: 1mm; font-family: "HCNeue"; font-weight: 500; }
+.hc-closing { text-align: center; font-family: "HCNeue"; font-weight: 700; color: var(--red); font-size: 12.5pt; margin: 4mm 0 2mm; }
+
+.hc-cl { display: flex; gap: 3mm; margin-bottom: 2.6mm; }
+.hc-cl .cn { flex: none; font-family: "HCNeue"; font-weight: 700; color: var(--red); min-width: 9mm; }
+
+.hc-price { display: flex; align-items: center; justify-content: space-between; gap: 6mm; flex-wrap: wrap; border-radius: 5mm; padding: 5mm 7mm; margin: 3mm 0 4mm; background: var(--ink); color: #fff; position: relative; overflow: hidden; }
+.hc-price .blob { position: absolute; left: -8mm; top: -10mm; width: 28mm; height: 24mm; border-radius: 55% 45% 60% 40%; background: var(--red); }
+.hc-price .lbl { font-family: "HCNeue"; font-weight: 700; font-size: 10pt; color: var(--gold); }
+.hc-price .name { font-family: "HCTzar"; font-weight: 700; font-size: 18pt; line-height: 1.1; margin: 1mm 0; }
+.hc-price .desc { font-size: 10.3pt; }
+.hc-price .amt { font-family: "HCTzar"; font-weight: 700; font-size: 28pt; line-height: 1; position: relative; z-index: 1; white-space: nowrap; }
+.hc-price .amt small { font-family: "HCNeue"; font-weight: 500; font-size: 10.5pt; margin-right: 1mm; }
+
+.hc-exits { display: flex; flex-wrap: wrap; gap: 5mm; margin: 2mm 0 3mm; }
+.hc-exit { flex: 1 1 60mm; border: .35mm solid var(--sand); border-radius: 4.5mm; overflow: hidden; }
+.hc-exit .eh { background: var(--cream); padding: 3mm 5mm; font-family: "HCNeue"; font-weight: 700; font-size: 12pt; display: flex; justify-content: space-between; align-items: center; }
+.hc-exit .eh span { color: var(--red); font-size: 10pt; }
+.hc-exit dl { padding: 2.5mm 5mm 3.5mm; font-size: 10.4pt; }
+.hc-exit dt { font-family: "HCNeue"; font-weight: 700; color: var(--wine); font-size: 9.5pt; margin-top: 1.6mm; }
+.hc-exit dd { line-height: 1.5; }
+
+.hc-sign-intro { font-family: "HCNeue"; font-weight: 700; font-size: 13pt; margin: 6mm 0 4mm; }
+.hc-signs { display: flex; flex-wrap: wrap; gap: 6mm; }
+.hc-sign { flex: 1 1 60mm; border-radius: 5mm; background: var(--cream); padding: 5mm 6mm 6mm; }
+.hc-sign h3 { font-family: "HCTzar"; font-weight: 700; font-size: 15pt; margin-bottom: 2mm; color: var(--red); }
+.hc-line { display: flex; align-items: flex-end; gap: 2mm; margin-top: 4.5mm; font-size: 10.5pt; }
+.hc-line > span { flex: none; font-family: "HCNeue"; font-weight: 500; }
+.hc-line > i { flex: 1; border-bottom: .35mm solid var(--ink); min-height: 6mm; font-style: normal; padding-right: 2mm; font-family: "HCNeue"; font-weight: 500; display: flex; align-items: flex-end; }
+.hc-line > i img { height: 15mm; width: auto; margin-bottom: -1mm; }
+.hc-slogan { text-align: center; margin-top: 10mm; font-family: "HCTzar"; font-weight: 700; font-size: 16pt; }
+.hc-slogan span { color: var(--red); }
+.hc-slogan::before { content: ""; display: block; width: 14mm; height: 1.2mm; background: var(--gold); border-radius: 1mm; margin: 0 auto 4mm; }
+.hc-meta { margin-top: 5mm; font-size: 8.5pt; color: var(--soft); text-align: center; }
