@@ -12,6 +12,8 @@ import { createClient } from '@supabase/supabase-js';
 import type { StatePatch } from './sync';
 import type { UserRole } from './types';
 import type { ContractData, ContractRecord, ContractStatus } from '../api/_lib/contractTypes';
+import type { QRecord } from '../api/_lib/questionnaireTypes';
+import type { QuestionnaireId } from '../api/_lib/questionnaireDefs';
 
 // ── Supabase client ──────────────────────────────────────────────────────────
 // VITE_* משתנים נחשפים לדפדפן — anon key בלבד (לא service role!)
@@ -307,4 +309,38 @@ export async function apiCancelContract(token: string): Promise<ContractRecord> 
 
 export async function apiContractPdfUrl(token: string): Promise<string> {
   return (await contractsCall<{ url: string }>({ query: `?pdf=${token}` })).url;
+}
+
+// ── שאלונים ללקוחות ───────────────────────────────────────────────────────────
+
+async function qCall<T>(init: RequestInit & { query?: string } = {}): Promise<T> {
+  const res = await fetch(`/api/questionnaires${init.query ?? ''}`, { ...init, headers: await authHeaders() });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error === 'server_error' ? 'שגיאה בשרת. נסו שוב בעוד רגע.' : body?.error ?? `שגיאה ${res.status}`);
+  return body as T;
+}
+
+export async function apiListLeadQuestionnaires(leadId: string): Promise<QRecord[]> {
+  return (await qCall<{ items: QRecord[] }>({ query: `?leadId=${encodeURIComponent(leadId)}` })).items;
+}
+export async function apiQuestionnaireConfig(): Promise<{ mail: boolean; drive: boolean; ai: boolean }> {
+  return qCall({ query: '?config=1' });
+}
+export async function apiCreateQuestionnaire(p: { leadId: string; clientId?: string; qid: QuestionnaireId }): Promise<QRecord> {
+  return (await qCall<{ item: QRecord }>({ method: 'POST', body: JSON.stringify({ action: 'create', ...p }) })).item;
+}
+export async function apiCancelQuestionnaire(token: string): Promise<QRecord> {
+  return (await qCall<{ item: QRecord }>({ method: 'POST', body: JSON.stringify({ action: 'cancel', token }) })).item;
+}
+export async function apiRetryQuestionnaire(token: string, what?: ('summary' | 'email' | 'drive')[]): Promise<QRecord> {
+  return (await qCall<{ item: QRecord }>({ method: 'POST', body: JSON.stringify({ action: 'retry', token, what }) })).item;
+}
+export async function apiAttachQuestionnairePdf(token: string, pdfBase64: string): Promise<QRecord> {
+  return (await qCall<{ item: QRecord }>({ method: 'POST', body: JSON.stringify({ action: 'attachPdf', token, pdfBase64 }) })).item;
+}
+export async function apiDeleteQuestionnaire(token: string): Promise<void> {
+  await qCall({ method: 'POST', body: JSON.stringify({ action: 'delete', token }) });
+}
+export async function apiQuestionnairePdfUrl(token: string): Promise<string> {
+  return (await qCall<{ url: string }>({ query: `?pdf=${token}` })).url;
 }

@@ -8,6 +8,8 @@ import type { AppState, Client, Lead, Product, OnboardingStep } from '../types';
 import { uid, formatDate } from '../utils';
 import { Btn, Input, Modal, Textarea } from '../ui';
 import ContractPanel from '../contracts/ContractPanel';
+import QuestionnairePanel from '../questionnaires/QuestionnairePanel';
+import { permsOf } from '../permissions';
 import { apiListContractSummaries, type ContractSummary } from '../api';
 
 // ─── Client Detail Modal ───────────────────────────────────────────────────────
@@ -19,7 +21,7 @@ function ClientDetailModal({ client, lead, product, state, onClose, onSave }: {
 }) {
   const [form, setForm] = useState<Client>(client);
   const [newStepTitle, setNewStepTitle] = useState('');
-  const [tab, setTab] = useState<'progress' | 'contract' | 'info' | 'notes'>('progress');
+  const [tab, setTab] = useState<'progress' | 'contract' | 'questionnaires' | 'info' | 'notes'>('progress');
 
   // Merge product steps + custom steps, sorted by order
   const productSteps: OnboardingStep[] = product
@@ -65,12 +67,13 @@ function ClientDetailModal({ client, lead, product, state, onClose, onSave }: {
   }
 
   const assignee = state.users.find(u => u.id === form.assignedTo);
-  const TABS = [
+  const TABS: { id: typeof tab; label: string }[] = [
     { id: 'progress', label: 'שלבי קליטה' },
     { id: 'contract', label: 'הסכם'       },
+    ...(permsOf(state)?.questionnaires ? [{ id: 'questionnaires' as const, label: 'שאלונים' }] : []),
     { id: 'info',     label: 'פרטים'      },
     { id: 'notes',    label: 'הערות'      },
-  ] as const;
+  ];
 
   return (
     <Modal open onClose={onClose} title={`קליטת לקוח — ${lead.name}`} wide>
@@ -169,6 +172,11 @@ function ClientDetailModal({ client, lead, product, state, onClose, onSave }: {
 
       {/* ── Contract Tab ── */}
       {tab === 'contract' && <ContractPanel client={client} lead={lead} />}
+
+      {/* ── Questionnaires Tab ── */}
+      {tab === 'questionnaires' && permsOf(state)?.questionnaires && (
+        <QuestionnairePanel lead={lead} clientId={client.id} canDelete={!!permsOf(state)?.manageUsers} />
+      )}
 
       {/* ── Info Tab ── */}
       {tab === 'info' && (
