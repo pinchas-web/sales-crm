@@ -124,7 +124,7 @@ function Results({ r, lead, canDelete, onBack, onChange, onDeleted }: {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="qpanel space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <Btn variant="secondary" size="sm" onClick={onBack}>→ חזרה לרשימה</Btn>
         <span className="text-xs text-gray-400">מולא {heDateTime(r.submittedAt)}{r.source === 'general' ? ' · דרך הקישור הכללי' : ''}</span>
@@ -320,7 +320,7 @@ export default function QuestionnairePanel({ lead, clientId, canDelete }: { lead
   }
 
   return (
-    <div className="space-y-4">
+    <div className="qpanel space-y-4">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-2.5">{error}</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

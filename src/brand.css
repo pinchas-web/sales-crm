@@ -843,6 +843,13 @@ label[class*="text-xs"] {
     width: calc(100vw - 16px) !important;
     max-width: none !important;
   }
+  /* כרטיסים בתוך מגירה (למשל לשונית השאלונים) הם לא חלון קופץ — לא למתוח אותם */
+  .fixed.inset-0 .qpanel .bg-white.rounded-xl,
+  .fixed.inset-0 .qpanel .bg-white.rounded-2xl {
+    margin: 0 !important;
+    width: auto !important;
+    max-height: none !important;
+  }
 
   /* Buttons: slightly larger tap targets */
   button { min-height: 34px; }
