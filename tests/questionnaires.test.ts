@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeDb, fakeRes } from './fakeSupabase';
 
-const h = vi.hoisted(() => ({ db: null as unknown as FakeDb, user: null as null | { crm_user_id: string; role: string; email: string } }));
+const h = vi.hoisted(() => ({ db: null as unknown as FakeDb, user: null as null | { crm_user_id: string; role: string; email: string }, mails: [] as Array<{ to: string[]; subject: string; html: string }> }));
 
 vi.mock('../api/_lib/supabaseAdmin', async () => {
   const { FakeDb } = await import('./fakeSupabase');
@@ -14,6 +14,11 @@ vi.mock('../api/_lib/supabaseAdmin', async () => {
 vi.mock('../api/_lib/auth', () => ({ validateRequest: async () => h.user }));
 vi.mock('@vercel/functions', () => ({ waitUntil: () => {} }));
 vi.mock('../api/_lib/questionnaireDelivery', () => ({ finalizeQ: async () => null }));
+vi.mock('../api/_lib/mailer', () => ({
+  mailConfigured: () => true,
+  notifyEmail: () => 'p@x.com',
+  sendMail: async (m: { to: string[]; subject: string; html: string }) => { h.mails.push(m); return 'sent'; },
+}));
 
 import handler from '../api/questionnaires';
 import {
@@ -51,7 +56,7 @@ function fullMental(): Record<string, string | number> {
   return a;
 }
 
-beforeEach(() => { seed(); h.user = null; });
+beforeEach(() => { seed(); h.user = null; h.mails.length = 0; });
 
 describe('חישוב ציונים', () => {
   it('היגד הפוך מחושב הפוך: 7 בהיגד שלילי = ציון 0 בתחום', () => {
@@ -206,5 +211,39 @@ describe('סיכום חינמי (בלי בינה מלאכותית)', () => {
     expect(text).toContain('כ-100 פגישות בחודש');
     expect(text).toContain('- הקשבה');
     expect(text).toContain('אין בידול מוגדר');
+  });
+});
+
+describe('שליחת קישורים במייל', () => {
+  beforeEach(() => { process.env.APP_URL = 'https://crm.test'; });
+  it('כמה שאלונים נשלחים במייל אחד, לכתובת שבתיק', async () => {
+    h.user = ADMIN;
+    const a = (await call('POST', { body: { action: 'create', leadId: 'l1', qid: 'strategy' } })).body.item;
+    const b = (await call('POST', { body: { action: 'create', leadId: 'l1', qid: 'mental' } })).body.item;
+    const r = await call('POST', { body: { action: 'sendLinks', leadId: 'l1', tokens: [a.token, b.token] } });
+    expect(r.statusCode).toBe(200);
+    expect(h.mails).toHaveLength(1);
+    expect(h.mails[0].to).toEqual(['dana@x.com']);
+    expect(h.mails[0].html).toContain(`/q/${a.token}`);
+    expect(h.mails[0].html).toContain(`/q/${b.token}`);
+    expect(h.mails[0].subject).toContain('שני שאלונים');
+    expect(r.body.items.every((x: Any) => x.emailedAt)).toBe(true);
+  });
+  it('לא שולחים קישור של ליד אחר, או קישור שכבר בוטל', async () => {
+    h.user = ADMIN;
+    const a = (await call('POST', { body: { action: 'create', leadId: 'l1', qid: 'strategy' } })).body.item;
+    expect((await call('POST', { body: { action: 'sendLinks', leadId: 'other', tokens: [a.token] } })).statusCode).toBe(404);
+    await call('POST', { body: { action: 'cancel', token: a.token } });
+    expect((await call('POST', { body: { action: 'sendLinks', leadId: 'l1', tokens: [a.token] } })).statusCode).toBe(409);
+    expect(h.mails).toHaveLength(0);
+  });
+  it('נציג מכירות לא יכול לשלוח', async () => {
+    h.user = { crm_user_id: 'u2', role: 'salesperson', email: 'y@x.com' };
+    expect((await call('POST', { body: { action: 'sendLinks', leadId: 'l1', tokens: ['a'.repeat(32)] } })).statusCode).toBe(403);
+  });
+  it('כתובת לא תקינה נדחית', async () => {
+    h.user = ADMIN;
+    const a = (await call('POST', { body: { action: 'create', leadId: 'l1', qid: 'strategy' } })).body.item;
+    expect((await call('POST', { body: { action: 'sendLinks', leadId: 'l1', tokens: [a.token], to: 'not-an-email' } })).statusCode).toBe(400);
   });
 });

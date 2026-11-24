@@ -329,6 +329,9 @@ export async function apiQuestionnaireConfig(): Promise<{ mail: boolean; drive: 
 export async function apiCreateQuestionnaire(p: { leadId: string; clientId?: string; qid: QuestionnaireId }): Promise<QRecord> {
   return (await qCall<{ item: QRecord }>({ method: 'POST', body: JSON.stringify({ action: 'create', ...p }) })).item;
 }
+export async function apiSendQuestionnaireLinks(p: { leadId: string; tokens: string[]; to?: string }): Promise<{ items: QRecord[]; to: string }> {
+  return qCall({ method: 'POST', body: JSON.stringify({ action: 'sendLinks', ...p }) });
+}
 export async function apiCancelQuestionnaire(token: string): Promise<QRecord> {
   return (await qCall<{ item: QRecord }>({ method: 'POST', body: JSON.stringify({ action: 'cancel', token }) })).item;
 }

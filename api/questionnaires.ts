@@ -11,6 +11,7 @@
  * GET  ?pdf=<token>     → קישור הורדה זמני
  * GET  ?config=1        → מה מחובר (מייל / דרייב / בינה מלאכותית)
  * POST { action:'create', leadId, clientId?, qid }
+ * POST { action:'sendLinks', leadId, tokens[], to? } — מייל אחד ללקוח עם כל הקישורים שנבחרו
  * POST { action:'cancel', token }
  * POST { action:'retry',  token, what?: ('summary'|'email'|'drive')[] }
  * POST { action:'attachPdf', token, pdfBase64 }   — כשהקובץ לא נוצר אצל הלקוח
@@ -29,7 +30,8 @@ import {
   getQ, saveQ, listForLead, deleteQ, savePdf, pdfUrl, pdfFileName, newToken, queryParam, allowGeneralSubmit,
 } from './_lib/questionnaireStore';
 import { finalizeQ } from './_lib/questionnaireDelivery';
-import { mailConfigured } from './_lib/mailer';
+import { mailConfigured, sendMail } from './_lib/mailer';
+import { inviteHtml, inviteSubject, EMAIL_RE } from './_lib/questionnaireInvite';
 import { driveConfigured } from './_lib/drive';
 
 const MIN_FILL_MS = 20_000;
@@ -203,7 +205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       if (queryParam(req, 'config')) {
-        return res.status(200).json({ mail: mailConfigured(), drive: driveConfigured(), ai: !!process.env.ANTHROPIC_API_KEY });
+        return res.status(200).json({ mail: mailConfigured(), drive: driveConfigured(), ai: true });
       }
       const pdfToken = queryParam(req, 'pdf');
       if (pdfToken) {
@@ -236,6 +238,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
       await saveQ(rec);
       return res.status(200).json({ item: rec });
+    }
+
+    if (body.action === 'sendLinks') {
+      const leadId = typeof body.leadId === 'string' ? body.leadId.slice(0, 100) : '';
+      const tokens: string[] = Array.isArray(body.tokens)
+        ? [...new Set((body.tokens as unknown[]).filter((t): t is string => typeof t === 'string' && TOKEN_RE.test(t)))].slice(0, 10)
+        : [];
+      if (!leadId || !tokens.length) return res.status(400).json({ error: 'לא נבחר שאלון לשליחה' });
+      if (!mailConfigured()) return res.status(503).json({ error: 'שליחת מיילים עוד לא מחוברת' });
+      const { data: lead } = await supabaseAdmin.from('leads').select('id, name, email').eq('id', leadId).maybeSingle();
+      if (!lead) return res.status(404).json({ error: 'הליד לא נמצא' });
+      const to = String(typeof body.to === 'string' && body.to.trim() ? body.to : lead.email ?? '').trim().slice(0, 200);
+      if (!EMAIL_RE.test(to)) return res.status(400).json({ error: 'אין בתיק כתובת מייל תקינה' });
+      const recs: QRecord[] = [];
+      for (const t of tokens) {
+        const r = await getQ(t);
+        if (!r || r.leadId !== leadId) return res.status(404).json({ error: 'שאלון לא נמצא' });
+        if (r.status !== 'sent' || (r.expiresAt && r.expiresAt < now)) return res.status(409).json({ error: 'אחד הקישורים כבר מולא, בוטל או פג תוקפו' });
+        recs.push(r);
+      }
+      const base = (process.env.APP_URL || baseUrlOf(req) || '').replace(/\/$/, '');
+      if (!base) return res.status(500).json({ error: 'לא הצלחתי לבנות קישור' });
+      const items = recs.map(r => ({ qid: r.qid, url: `${base}/q/${r.token}`, expiresAt: r.expiresAt }));
+      await sendMail({ to: [to], subject: inviteSubject(items), html: inviteHtml(String(lead.name ?? ''), items) });
+      const updated = recs.map(r => ({ ...r, emailedAt: now, contactEmail: r.contactEmail || to, updatedAt: now }));
+      for (const u of updated) await saveQ(u);
+      return res.status(200).json({ items: updated, to });
     }
 
     const token = typeof body.token === 'string' ? body.token : '';
