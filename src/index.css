@@ -10,58 +10,56 @@
   src: url('/fonts/almoni-regular.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Almoni AAA';
   src: url('/fonts/almoni-medium.otf') format('opentype');
   font-weight: 500;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Almoni AAA';
   src: url('/fonts/almoni-bold.otf') format('opentype');
   font-weight: 700;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
-/* Alias: "Almoni DL AAA" — common variant name used in PPTX files */
 @font-face {
   font-family: 'Almoni DL AAA';
   src: url('/fonts/almoni-regular.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Almoni DL AAA';
   src: url('/fonts/almoni-medium.otf') format('opentype');
   font-weight: 500;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Almoni DL AAA';
   src: url('/fonts/almoni-bold.otf') format('opentype');
   font-weight: 700;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
-/* Alias: "Almoni Neue AAA" — another variant name seen in slides */
 @font-face {
   font-family: 'Almoni Neue AAA';
   src: url('/fonts/almoni-regular.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Almoni Neue AAA';
   src: url('/fonts/almoni-bold.otf') format('opentype');
   font-weight: 700;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 
 * {
@@ -72,49 +70,62 @@ body {
   margin: 0;
   direction: rtl;
   font-family: 'Almoni AAA', 'Almoni DL AAA', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f3f4f6;
+  background-color: var(--c-bg);
   min-height: 100vh;
+  line-height: 1.55;
 }
 
 #root {
   min-height: 100vh;
 }
 
+/* ── Kanban scroll ────────────────────────────────────────────────────────── */
 .kanban-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-.card-drag-handle {
-  cursor: grab;
-}
+.card-drag-handle { cursor: grab; }
+.card-drag-handle:active { cursor: grabbing; }
 
-.card-drag-handle:active {
-  cursor: grabbing;
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
-
-/* Scrollbar hide utility */
+/* ── Scrollbar hide ──────────────────────────────────────────────────────── */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ── Component layer ─────────────────────────────────────────────────────── */
 @layer components {
   .field-label {
-    @apply block text-xs font-medium text-gray-600 mb-1;
+    @apply block text-xs font-semibold text-gray-600 mb-1;
+    letter-spacing: .03em;
   }
+
+  /* Smooth page transitions */
+  .page-enter {
+    animation: brand-fadeIn 0.22s cubic-bezier(0,.0,.2,1) both;
+  }
+
+  /* Highlight ring for interactive items */
+  .ring-brand {
+    box-shadow: 0 0 0 2px var(--c-primary);
+  }
+
+  /* Subtle inner shadow for depth */
+  .inset-brand {
+    box-shadow: inset 0 1px 3px rgba(28,24,21,.08);
+  }
+}
+
+/* ── Utilities layer ─────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Stagger animation helpers */
+  .anim-delay-50  { animation-delay:  50ms; }
+  .anim-delay-100 { animation-delay: 100ms; }
+  .anim-delay-150 { animation-delay: 150ms; }
+  .anim-delay-200 { animation-delay: 200ms; }
+  .anim-delay-300 { animation-delay: 300ms; }
+
+  /* Brand text sizes */
+  .text-brand-xs  { font-size: .70rem; line-height: 1.4; }
+  .text-brand-sm  { font-size: .80rem; line-height: 1.5; }
+  .text-brand-base{ font-size: .90rem; line-height: 1.55; }
 }
